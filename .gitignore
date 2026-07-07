@@ -6,6 +6,13 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+frontend/build/
+frontend/.vercel/
 
 # Env / secrets (bot API keys, etc.)
 .env

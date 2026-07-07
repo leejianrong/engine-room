@@ -1,0 +1,22 @@
+# Local Postgres for development (ADR-0005/0018). Live game state is in-memory
+# in the worker; this stores durable records written at finalization.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: engine_room
+      POSTGRES_PASSWORD: engine_room
+      POSTGRES_DB: engine_room
+    ports:
+      # Host 5433 -> container 5432, to avoid colliding with a local Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engine_room"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
