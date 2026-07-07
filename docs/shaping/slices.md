@@ -43,11 +43,12 @@ Run the server. Run a stub bot-client script. Observe: it connects, seeks 3+0, i
 - In-process house `RandomBot` (uniform random legal move).
 - Trivial always-pair matcher behind the `MatchmakingQueue` interface.
 - In-process `PubSub` behind its interface; SSE endpoint streaming move/`game_over` events.
-- Bare (unstyled) spectator page consuming the SSE stream.
-- Atomic finalization: one Postgres txn writing the `games` record.
+- 🟡 Minimal **SvelteKit** page consuming the SSE stream (real frontend project stood up now; V6 extends it — decided in [V1-plan D-b](V1-plan.md#build-time-decisions-pinned-for-v1)).
+- 🟡 Atomic finalization: one Postgres txn writing the `games` record via **SQLAlchemy 2.0 async + Alembic** (decided in [V1-plan D-a](V1-plan.md#build-time-decisions-pinned-for-v1)).
 
 ### Explicitly out (proven by later slices)
-Auth (dev-token stub only) → V2 · Elo/pools/TTL/same-owner → V3 · reconnect/`ply`-idempotency/heartbeat/illegal-move-forfeit → V4 · resign/draw/auto-draw/real-Elo → V5 · catch-up snapshot/replay/lobby/styling → V6 · packaged SDK/quickstart/UCI bridge → V7 · 5+0 pool (V1 hardcodes 3+0).
+Auth (dev-token stub only) → V2 · Elo/pools/TTL/same-owner → V3 · reconnect/`ply`-idempotency/heartbeat/illegal-move-forfeit → V4 · resign/draw/auto-draw/real-Elo → V5 · catch-up snapshot/replay/lobby/board-styling → V6 · packaged SDK/quickstart/UCI bridge → V7 · 5+0 pool (V1 hardcodes 3+0).
+🟡 Note: the SvelteKit *project* lands in V1 (D-b), but only the bare move-list view — the styled board, lobby, catch-up and replay are still V6.
 
 ### V1 breadboard
 The affordance tables + wiring for V1 are in [shaping.md → Detail A → A1](shaping.md#a1--skeleton-thread--v1) (U1–U2, N1–N10). Reproduced-by-reference here to avoid drift; V1-plan.md will cite specific affordance IDs.

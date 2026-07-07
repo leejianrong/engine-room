@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 Date: 2026-07-07
-Primary source of truth for decisions: the ADRs in `docs/adr/` and the wire contract in [PROTOCOL.md](../PROTOCOL.md). This PRD synthesizes them into a build brief; it does not re-derive them. Terms are used per the glossary in [CONTEXT.md](../CONTEXT.md).
+Primary source of truth for decisions: the ADRs in `docs/adr/` and the wire contract in [PROTOCOL.md](PROTOCOL.md). This PRD synthesizes them into a build brief; it does not re-derive them. Terms are used per the glossary in [CONTEXT.md](CONTEXT.md).
 
 ---
 
@@ -173,7 +173,7 @@ These consolidate the ADRs. Where a decision has an ADR, it is cited; the ADR ho
 - **Bot auth: one rotatable API key per Bot**, stored hashed, shown once, prefixed token; sent as `Authorization: Bearer <key>` **on the WebSocket upgrade** — not per-message, not in the query string (ADR-0014). Rotation regenerates and **instantly invalidates** the old key. Reconnect uses the same key; the server re-binds the Bot's active seat. **Newest-wins:** a new authenticated handshake replaces (and closes) the prior live Session.
 
 ### Bot WebSocket protocol (the contract)
-- The full wire contract is **[PROTOCOL.md](../PROTOCOL.md) v1.0** and is the authoritative spec for this surface. Endpoint `wss://<host>/api/bot/v1` (major version in the path); UTF-8 JSON text frames; durations in integer **milliseconds**; moves in **lowercase UCI**; colors `"white"`/`"black"`.
+- The full wire contract is **[PROTOCOL.md](PROTOCOL.md) v1.0** and is the authoritative spec for this surface. Endpoint `wss://<host>/api/bot/v1` (major version in the path); UTF-8 JSON text frames; durations in integer **milliseconds**; moves in **lowercase UCI**; colors `"white"`/`"black"`.
 - Message set: `hello`/`welcome` (handshake + protocol version + reconnect payload), `seek`/`seek_ack`/`seek_cancel`/`seek_ended`, `game_start`, `your_turn`/`move`/`move_ack`, `resign`, `draw_offer`/`draw_accept`, `game_over`, `ping`/`pong`, `error`.
 - **State on the wire** (resolves B5, C8): `your_turn` carries the **full FEN every turn** (stateless for the bot), the opponent's `last_move`, both clocks as remaining ms, `your_color`, and `opponent_draw_offer`. Clocks are the remaining ms **at the instant the server sent `your_turn`**; the side-to-move's clock runs from that send instant to server-receipt of the move; increment (0 at MVP) is credited after the move applies.
 - **`ply`-anchored idempotency & ordering** (resolves I4, PROTOCOL §9): a `move` applies only if `move.ply == expected_ply`; a matching-uci resend at an already-applied ply re-acks **without re-applying**; a stale/conflicting lower ply is ignored and **never penalized**; a future ply returns `INVALID_PLY`. Only an illegal move **at the current ply** forfeits.

@@ -7,11 +7,11 @@ shaping: true
 ## Source
 
 The design has already been fully grilled and documented:
-- [REQS.md](../../REQS.md) — original idea, problem, users, outcomes, scope.
-- [CONTEXT.md](../../CONTEXT.md) — glossary, domain model + invariants, 26-row decisions log, MVP definition.
+- [REQS.md](../design/REQS.md) — original idea, problem, users, outcomes, scope.
+- [CONTEXT.md](../design/CONTEXT.md) — glossary, domain model + invariants, 26-row decisions log, MVP definition.
 - [docs/adr/0001–0025](../adr/) — architecture decision records (the "why" behind every choice).
-- [PROTOCOL.md](../../PROTOCOL.md) — the bot↔server WebSocket wire contract, v1.0.
-- [docs/PRD.md](../PRD.md) — the build brief (problem, solution, 76 user stories, implementation + testing decisions, scope).
+- [PROTOCOL.md](../design/PROTOCOL.md) — the bot↔server WebSocket wire contract, v1.0.
+- [docs/PRD.md](../design/PRD.md) — the build brief (problem, solution, 76 user stories, implementation + testing decisions, scope).
 
 Demoable slice (ADR-0023), the north star for this shaping:
 

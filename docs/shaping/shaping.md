@@ -4,7 +4,7 @@ shaping: true
 
 # Engine Room MVP — Shaping
 
-Working document. Frame: [frame.md](frame.md). Ground truth for decisions remains the ADRs + [PROTOCOL.md](../../PROTOCOL.md); this doc plans **how we build the already-decided design**, i.e. the slicing strategy and order.
+Working document. Frame: [frame.md](frame.md). Ground truth for decisions remains the ADRs + [PROTOCOL.md](../design/PROTOCOL.md); this doc plans **how we build the already-decided design**, i.e. the slicing strategy and order.
 
 The solution *architecture* is fixed (25 ADRs). The open decision here is the **slicing strategy**: how to cut the MVP into vertical, demoable increments and in what order. Shapes A/B/C below are competing slicing strategies, not competing architectures.
 
@@ -211,5 +211,5 @@ Each later part replaces or extends specific A1 affordances rather than adding n
 | A3 | Real matchmaking | N3 always-pair → Elo pools behind `MatchmakingQueue`, same-owner exclusion (house exempt), seek TTL/expiry, anti-rematch, start-grace→ABORTED |
 | A4 | Resilience | N1/N5 gain reconnect-resume (`welcome.active_game`), `ply`-idempotency, heartbeat mutual-abandon→ABORTED, illegal-move forfeit, rate limits |
 | A5 | Full outcomes | N5/N8 gain resign, draw offer/accept, server auto-draws, full termination vocab, real Elo update (N8 rating no longer stubbed) |
-| A6 | Spectator UX | N9 gains catch-up snapshot + replay; U1/U2 → real Svelte board + REST-poll lobby |
+| A6 | Spectator UX | N9 gains catch-up snapshot + replay; U1/U2 SvelteKit view (stood up in V1, D-b) **extended** with a real board + REST-poll lobby |
 | A7 | Hero onboarding | Bot client stub → packaged `chessroom` SDK repo + `uv` quickstart + client-side UCI bridge; reference bots become the N4 house bots |

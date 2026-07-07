@@ -75,31 +75,31 @@ _(one line per settled decision; deep rationale lives in the linked ADR)_
 
 | # | Decision | ADR |
 |---|----------|-----|
-| 1 | MVP time-control floor = **Blitz (3+0, 5+0)**; Bullet deferred | [ADR-0001](docs/adr/0001-time-control-floor.md) |
-| 2 | Bot↔server transport = **persistent WebSocket** (server pushes turns; reused for spectators) | [ADR-0002](docs/adr/0002-transport-websocket.md) |
-| 3 | **Server-authoritative clock**; bot eats its own network latency; no RTT compensation at MVP | [ADR-0003](docs/adr/0003-clock-bot-eats-latency.md) |
-| 4 | Mid-game disconnect = **reconnect window, clock keeps running**; else forfeit | [ADR-0004](docs/adr/0004-disconnect-reconnect-window.md) |
-| 5 | Stack = **FastAPI + Postgres** backend, **TypeScript** frontend (Svelte/React TBD) | [ADR-0005](docs/adr/0005-stack-fastapi-postgres-ts.md) |
-| 6 | Rules authority = **`python-chess`** (legality, mate/draw detection, PGN, UCI↔SAN) | [ADR-0006](docs/adr/0006-rules-authority-python-chess.md) |
-| 7 | Move wire format = **UCI coordinate** (single canonical); SAN for display only | [ADR-0007](docs/adr/0007-move-wire-format-uci.md) |
-| 8 | **Result + termination-reason** vocabulary; bots may **resign / offer draw** | [ADR-0008](docs/adr/0008-result-and-termination-vocabulary.md) |
-| 9 | Core entities: **User→(N)Bot→(N)Session**; Bot is first-class; Seat bound to Bot; "Game" not "Match" | [ADR-0009](docs/adr/0009-core-domain-entities.md) |
-| 10 | **Game lifecycle** = QUEUED→PAIRED→IN_PROGRESS→FINISHED\|ABORTED (explicit state machine) | [ADR-0010](docs/adr/0010-game-lifecycle-state-machine.md) |
-| 11 | **Elo pairing + per-Bot ratings at MVP** (widening-window); rating updates on FINISHED only | [ADR-0011](docs/adr/0011-elo-matchmaking-and-ratings.md) |
-| 12 | Matchmaking policy: **pools per time control**, **anonymous auto-pairing only**, queue TTL give-up, **anti-rematch cooldown** | [ADR-0012](docs/adr/0012-matchmaking-pool-and-queue-policy.md) |
-| 13 | Human auth = **GitHub OAuth** via **FastAPI-Users**, modular for Google/password later | [ADR-0013](docs/adr/0013-human-auth-github-oauth.md) |
-| 14 | Bot auth = **one rotatable API key/Bot**, hashed, sent at WS handshake; instant-invalidate on rotation; reconnect uses same key | [ADR-0014](docs/adr/0014-bot-api-keys-and-handshake.md) |
-| 15 | Spectating = **SSE**, **anonymous**, **no broadcast delay**, catch-up snapshot + replay on join | [ADR-0015](docs/adr/0015-spectator-delivery-sse.md) |
-| 16 | **MVP fine-print batch**: session newest-wins, illegal-move=forfeit, soft anti-rematch, auto-draws (no claim), same-owner exclusion, + matchmaking numbers | [ADR-0016](docs/adr/0016-mvp-defaults-batch.md) |
-| 17 | Frontend framework = **Svelte** (flip to React on preference) | [ADR-0017](docs/adr/0017-frontend-svelte.md) |
-| 18 | Persistence: **in-memory live state**, **Postgres records** at finalization, **Redis pub/sub only**, **PGNs at MVP** | [ADR-0018](docs/adr/0018-persistence-model.md) |
-| 19 | Abuse: **5 bots/user** (Premium lever later), rate-limit connect/queue/messages, **soft griefing cooldowns**, GitHub-account human gate | [ADR-0019](docs/adr/0019-abuse-prevention.md) |
-| 20 | Topology: **single game-process at MVP**; scale via **Redis-bridged edge/home worker** reusing the spectator bus (global Redis queues) | [ADR-0020](docs/adr/0020-worker-assignment-topology.md) |
-| 21 | **Python SDK** + **client-side UCI bridge**; SDK is its own repo, depends only on a versioned protocol spec; handshake carries protocol version | [ADR-0021](docs/adr/0021-client-sdk-and-uci-bridge.md) |
-| 22 | Onboarding: GitHub → key-once → clone quickstart → run; **house bots** always in pools guarantee a first match + a live lobby | [ADR-0022](docs/adr/0022-onboarding-and-house-bots.md) |
-| 23 | **MVP scope & success**: demoable slice, v1 in/out line, primary user = AI/CS student (SDK is the hero path) | [ADR-0023](docs/adr/0023-mvp-scope-and-success.md) |
-| 24 | Bot tooling = **uv + pyproject.toml** (hero path); **container optional**, not default | [ADR-0024](docs/adr/0024-bot-tooling-uv-and-optional-container.md) |
-| 25 | **A2 consistency pass**: house-bot exemption · no Redis in MVP (behind interfaces) · clock is sole arbiter · queue-over-WS · atomic finalization | [ADR-0025](docs/adr/0025-a2-consistency-pass.md) |
+| 1 | MVP time-control floor = **Blitz (3+0, 5+0)**; Bullet deferred | [ADR-0001](../adr/0001-time-control-floor.md) |
+| 2 | Bot↔server transport = **persistent WebSocket** (server pushes turns; reused for spectators) | [ADR-0002](../adr/0002-transport-websocket.md) |
+| 3 | **Server-authoritative clock**; bot eats its own network latency; no RTT compensation at MVP | [ADR-0003](../adr/0003-clock-bot-eats-latency.md) |
+| 4 | Mid-game disconnect = **reconnect window, clock keeps running**; else forfeit | [ADR-0004](../adr/0004-disconnect-reconnect-window.md) |
+| 5 | Stack = **FastAPI + Postgres** backend, **TypeScript** frontend (Svelte/React TBD) | [ADR-0005](../adr/0005-stack-fastapi-postgres-ts.md) |
+| 6 | Rules authority = **`python-chess`** (legality, mate/draw detection, PGN, UCI↔SAN) | [ADR-0006](../adr/0006-rules-authority-python-chess.md) |
+| 7 | Move wire format = **UCI coordinate** (single canonical); SAN for display only | [ADR-0007](../adr/0007-move-wire-format-uci.md) |
+| 8 | **Result + termination-reason** vocabulary; bots may **resign / offer draw** | [ADR-0008](../adr/0008-result-and-termination-vocabulary.md) |
+| 9 | Core entities: **User→(N)Bot→(N)Session**; Bot is first-class; Seat bound to Bot; "Game" not "Match" | [ADR-0009](../adr/0009-core-domain-entities.md) |
+| 10 | **Game lifecycle** = QUEUED→PAIRED→IN_PROGRESS→FINISHED\|ABORTED (explicit state machine) | [ADR-0010](../adr/0010-game-lifecycle-state-machine.md) |
+| 11 | **Elo pairing + per-Bot ratings at MVP** (widening-window); rating updates on FINISHED only | [ADR-0011](../adr/0011-elo-matchmaking-and-ratings.md) |
+| 12 | Matchmaking policy: **pools per time control**, **anonymous auto-pairing only**, queue TTL give-up, **anti-rematch cooldown** | [ADR-0012](../adr/0012-matchmaking-pool-and-queue-policy.md) |
+| 13 | Human auth = **GitHub OAuth** via **FastAPI-Users**, modular for Google/password later | [ADR-0013](../adr/0013-human-auth-github-oauth.md) |
+| 14 | Bot auth = **one rotatable API key/Bot**, hashed, sent at WS handshake; instant-invalidate on rotation; reconnect uses same key | [ADR-0014](../adr/0014-bot-api-keys-and-handshake.md) |
+| 15 | Spectating = **SSE**, **anonymous**, **no broadcast delay**, catch-up snapshot + replay on join | [ADR-0015](../adr/0015-spectator-delivery-sse.md) |
+| 16 | **MVP fine-print batch**: session newest-wins, illegal-move=forfeit, soft anti-rematch, auto-draws (no claim), same-owner exclusion, + matchmaking numbers | [ADR-0016](../adr/0016-mvp-defaults-batch.md) |
+| 17 | Frontend framework = **Svelte** (flip to React on preference) | [ADR-0017](../adr/0017-frontend-svelte.md) |
+| 18 | Persistence: **in-memory live state**, **Postgres records** at finalization, **Redis pub/sub only**, **PGNs at MVP** | [ADR-0018](../adr/0018-persistence-model.md) |
+| 19 | Abuse: **5 bots/user** (Premium lever later), rate-limit connect/queue/messages, **soft griefing cooldowns**, GitHub-account human gate | [ADR-0019](../adr/0019-abuse-prevention.md) |
+| 20 | Topology: **single game-process at MVP**; scale via **Redis-bridged edge/home worker** reusing the spectator bus (global Redis queues) | [ADR-0020](../adr/0020-worker-assignment-topology.md) |
+| 21 | **Python SDK** + **client-side UCI bridge**; SDK is its own repo, depends only on a versioned protocol spec; handshake carries protocol version | [ADR-0021](../adr/0021-client-sdk-and-uci-bridge.md) |
+| 22 | Onboarding: GitHub → key-once → clone quickstart → run; **house bots** always in pools guarantee a first match + a live lobby | [ADR-0022](../adr/0022-onboarding-and-house-bots.md) |
+| 23 | **MVP scope & success**: demoable slice, v1 in/out line, primary user = AI/CS student (SDK is the hero path) | [ADR-0023](../adr/0023-mvp-scope-and-success.md) |
+| 24 | Bot tooling = **uv + pyproject.toml** (hero path); **container optional**, not default | [ADR-0024](../adr/0024-bot-tooling-uv-and-optional-container.md) |
+| 25 | **A2 consistency pass**: house-bot exemption · no Redis in MVP (behind interfaces) · clock is sole arbiter · queue-over-WS · atomic finalization | [ADR-0025](../adr/0025-a2-consistency-pass.md) |
 | 26 | **Wire protocol v1.0 drafted** — bot↔server contract; resolves B5 (full FEN/turn), I4 (ply idempotency), C8 (clock fields) | [PROTOCOL.md](PROTOCOL.md) |
 
 ## MVP definition (ADR-0023)
