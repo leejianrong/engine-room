@@ -1,0 +1,36 @@
+# ADR-0022: Onboarding flow + house bots
+
+- **Status:** accepted
+- **Date:** 2026-07-07
+- **Deciders:** leejianrong, Claude
+
+## Context
+Defines the "signup → first move" path and fixes a cold-start problem it exposes. Answers QUESTIONS L3; complements the SDK (ADR-0021) and matchmaking (ADR-0011/0012/0016).
+
+## Decision
+
+**Onboarding path (target: < 20 min):**
+1. Sign in with GitHub (ADR-0013) → dashboard.
+2. Create a bot → **API key shown exactly once** (ADR-0014) → copy.
+3. `git clone <quickstart-repo>` → `pip install -r requirements.txt` (installs the `chessroom` SDK, ADR-0021).
+4. Paste the key into `.env` (`CHESSROOM_KEY=...`) → `python random_bot.py`.
+5. SDK connects, auto-queues, calls `choose_move(board)` (returns a random legal move) → bot is playing.
+6. Dashboard links to the live spectator view (ADR-0015).
+
+A dedicated minimal **quickstart template repo** (a ready `RandomBot` + README) is the newcomer's entry point; it depends on the published SDK rather than vendoring it.
+
+**House bots (fixes cold start):** the platform runs a small stable of always-available **house/reference bots** (e.g. `house-random`, `house-minimax`) sitting in every time-control pool.
+- Guarantees a newcomer's first bot gets an **immediate match** instead of hitting the ticket TTL on an empty pool (ADR-0016).
+- House bots playing each other keep the **spectator dashboard alive with zero real users** (serves the "casually log on and watch" pitch).
+- They are the SDK's example bots, so they double as living documentation.
+- Owned by a platform account and rated normally; the same-owner exclusion (ADR-0016) does **not** block real users from being paired with them.
+
+## Alternatives considered
+- **No house bots** — rejected; a newcomer's first game would time out on an empty MVP platform (awful first impression) and spectators would see an empty lobby.
+- **Vendoring the SDK into the quickstart** — rejected; the quickstart depends on the published package so upgrades are a version bump.
+- **Minimax as the hello-world default** — rejected; `RandomBot` needs zero chess knowledge and is the true minimal example (minimax is the "level 2" sample).
+
+## Consequences
+- Positive: guaranteed, instant first game; a lively spectator experience from day one; example bots earn double duty as house bots.
+- Negative / costs: house bots are always-on processes to operate/monitor; their ratings occupy the leaderboard (acceptable / expected).
+- Follow-on questions opened: how many house bots and at what strength spread; should house-bot games be visually flagged as such in the lobby.
