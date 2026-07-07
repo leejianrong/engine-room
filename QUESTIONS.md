@@ -20,7 +20,7 @@ Legend for leverage: ⭐️ = high-leverage (drives many downstream decisions).
 - 🟢 B2. → Bot holds a persistent connection; **server pushes** `your_turn` events (ADR-0002).
 - 🟢 B3. → **UCI coordinate notation**, single canonical wire format; SAN is display-only (ADR-0007).
 - 🟢 B4. → **FEN** for state (+ last move) on the wire (ADR-0007).
-- 🟡 B5. `your_turn` carries current state + clock + last move; open detail: full FEN every turn vs deltas (ADR-0007).
+- 🟢 B5. → **Full FEN every `your_turn`** (+ last move + clocks); stateless for the bot, deltas rejected (PROTOCOL.md §6).
 - 🟢 B6. → Handshake authenticates via the bot API key (ADR-0014) **and carries a protocol version** for SDK/server compatibility (ADR-0021).
 - 🟢 B7. → **Instant forfeit** (`ILLEGAL_MOVE`), no retry; non-move junk ignored, clock keeps running (ADR-0016).
 
@@ -32,7 +32,7 @@ Legend for leverage: ⭐️ = high-leverage (drives many downstream decisions).
 - 🟢 C5. → **No** separate per-move connection grace at MVP (rejected in ADR-0003 as gameable).
 - 🟢 C6. → **Auto-detected server-side**, instantly; not opponent-claimed (ADR-0003).
 - 🟢 C7. → **Per-seek selectable**: the bot specifies its time control in the `seek` message it sends over the WebSocket (ADR-0025).
-- 🔴 C8. Clock precision details: does the clock start at server-send or socket-flush? What monotonic time source? How/when is increment credited? (opened by ADR-0003)
+- 🟡 C8. → **Protocol-level resolved**: clocks carried as remaining ms, running from `your_turn` send instant; increment credited post-move (PROTOCOL.md §6). Server-internal monotonic source is an impl detail (non-blocking).
 
 ## D. Chess rules & authority ⭐️
 - 🟢 D1. ⭐️ → **Yes**, server is single source of truth; `python-chess` board is authoritative (ADR-0006).
@@ -82,7 +82,7 @@ Legend for leverage: ⭐️ = high-leverage (drives many downstream decisions).
 - 🟢 I6. → Reconnect with the **same bot API key**; server re-binds the Bot's active seat (optionally referencing `game_id`) (ADR-0014).
 - 🟢 I7. → **ABORTED** (no result), not a draw (ADR-0016).
 - 🟡 I3. → **Accepted MVP risk**: a worker crash loses its in-progress games; not recoverable until live-state-in-Redis is added later (ADR-0018, ADR-0020). Recovery mechanism = deferred.
-- 🔴 I4. Idempotency: if a bot resends a move after a network blip, how do we avoid double-applying?
+- 🟢 I4. → **`ply`-anchored idempotency**: a move applies only at the expected ply; matching-uci resends re-ack without re-applying; stale/conflicting are ignored, never penalized (PROTOCOL.md §9).
 
 ## J. Persistence & data
 - 🟢 J1. → **In-memory in the game's worker** at MVP; not persisted per-move (ADR-0018).
@@ -124,3 +124,4 @@ _(appended live as answers open new questions)_
 - Round 10 (MVP scope, ADR-0023) resolved **M1, M2, M3**. Demoable slice + v1 boundary + primary user (AI/CS student) fixed. **All 13 backlog sections settled.**
 - Round 11 (bot tooling, ADR-0024) resolved tooling: **uv + pyproject.toml**, container as optional path. Amends ADR-0021/0022.
 - **A2 consistency pass (ADR-0025)** — fixed 2 contradictions (house-bot same-owner; Redis-in-MVP), simplified disconnect (clock is sole arbiter), nailed queue-over-WS, + atomic finalization / increment-dormant / spectator cap. Resolved **C7, I5**. Amends ADR-0004/0016/0018/0019/0022.
+- **Protocol spec drafted (PROTOCOL.md)** — the bot↔server WebSocket wire contract. Resolved **B5** (full FEN/turn), **I4** (ply-anchored idempotency), and **C8** at the protocol level. Defines hello/seek/your_turn/move/game_over/heartbeat + reconnect + error codes.

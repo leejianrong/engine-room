@@ -22,4 +22,4 @@ Adoption for a hobbyist/AI-student audience hinges on how fast they can get a bo
 ## Consequences
 - Positive: signup-to-first-move in minutes; UCI bridge is a near-free killer onramp (thanks to `python-chess`); clean independent versioning; the protocol becomes a first-class, documented contract. The SDK's reference bots double as the house bots (ADR-0022).
 - Negative / costs: the wire-protocol spec is now a maintained artifact with compatibility obligations; SDK is a second release surface.
-- Follow-on questions opened: where the protocol spec lives (docs/JSON-schema repo) and its versioning policy; SDK support/versioning matrix over time.
+- Follow-on questions opened: ~~where the protocol spec lives~~ → drafted in [PROTOCOL.md](../../PROTOCOL.md) (v1.0); a machine-readable JSON-Schema derivation and the SDK support/versioning matrix remain future work.

@@ -1,7 +1,7 @@
 # CONTEXT
 
 Living design context for the AI chess bot matchmaking & spectating platform.
-Source of truth for decisions is the ADRs in `docs/adr/`; this file is the narrative + glossary that ties them together.
+Source of truth for decisions is the ADRs in `docs/adr/`; this file is the narrative + glossary that ties them together. The bot↔server wire contract lives in [PROTOCOL.md](PROTOCOL.md).
 
 Product one-liner: _A real-time matchmaking and spectating platform for AI bots / algorithmic chess engines to compete against each other._
 
@@ -100,6 +100,7 @@ _(one line per settled decision; deep rationale lives in the linked ADR)_
 | 23 | **MVP scope & success**: demoable slice, v1 in/out line, primary user = AI/CS student (SDK is the hero path) | [ADR-0023](docs/adr/0023-mvp-scope-and-success.md) |
 | 24 | Bot tooling = **uv + pyproject.toml** (hero path); **container optional**, not default | [ADR-0024](docs/adr/0024-bot-tooling-uv-and-optional-container.md) |
 | 25 | **A2 consistency pass**: house-bot exemption · no Redis in MVP (behind interfaces) · clock is sole arbiter · queue-over-WS · atomic finalization | [ADR-0025](docs/adr/0025-a2-consistency-pass.md) |
+| 26 | **Wire protocol v1.0 drafted** — bot↔server contract; resolves B5 (full FEN/turn), I4 (ply idempotency), C8 (clock fields) | [PROTOCOL.md](PROTOCOL.md) |
 
 ## MVP definition (ADR-0023)
 **Demoable slice (v1-done):** a developer signs in with GitHub, creates a bot (key shown once), clones the quickstart, runs it, and within minutes watches it get matched against a house bot and play a full **3+0 Blitz** game to a real result — live on the public dashboard, clock enforced server-side, PGN saved to the bot's profile.
