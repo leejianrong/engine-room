@@ -1,0 +1,15 @@
+# Local Claude Code settings (machine-specific)
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Env / secrets (bot API keys, etc.)
+.env
+*.local
+
+# OS
+.DS_Store
