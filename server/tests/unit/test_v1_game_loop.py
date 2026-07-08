@@ -3,7 +3,7 @@
 Primary WS test seam. Drives real python-chess play through the wire protocol.
 """
 
-from fake_client import connect
+from support.fake_client import connect
 
 _VALID_RESULTS = {"white_wins", "black_wins", "draw"}
 _NATURAL_TERMINATIONS = {

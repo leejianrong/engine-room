@@ -19,8 +19,8 @@ from ..protocol.messages import (
     Clocks,
     Error,
     GameOver,
-    MoveAck,
     Move,
+    MoveAck,
     Rating,
     YourTurn,
 )

@@ -1,7 +1,8 @@
 """V1 sub-step 3 checkpoint: a seek pairs the bot with a house bot (game_start)."""
 
+from support.fake_client import connect
+
 from engine_room.app import create_app
-from fake_client import connect
 
 
 def test_seek_pairs_with_house_bot():

@@ -50,7 +50,11 @@ async def test_sse_streams_a_live_game():
             await ws.recv()  # welcome
             await ws.send(
                 json.dumps(
-                    {"type": "seek", "id": "c1", "time_control": {"base_seconds": 180, "increment_seconds": 0}}
+                    {
+                        "type": "seek",
+                        "id": "c1",
+                        "time_control": {"base_seconds": 180, "increment_seconds": 0},
+                    }
                 )
             )
             await ws.recv()  # seek_ack
@@ -70,7 +74,12 @@ async def test_sse_streams_a_live_game():
                             uci = rng.choice(list(board.legal_moves)).uci()
                             await ws.send(
                                 json.dumps(
-                                    {"type": "move", "game_id": game_id, "ply": turn["ply"], "uci": uci}
+                                    {
+                                        "type": "move",
+                                        "game_id": game_id,
+                                        "ply": turn["ply"],
+                                        "uci": uci,
+                                    }
                                 )
                             )
                             while True:

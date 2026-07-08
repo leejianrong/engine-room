@@ -161,4 +161,6 @@ def parse_client_message(raw: str) -> BaseModel:
     try:
         return model.model_validate(data)
     except ValidationError as exc:
-        raise ProtocolError("INVALID_MESSAGE", f"invalid {data['type']}: {exc.error_count()} error(s)")
+        raise ProtocolError(
+            "INVALID_MESSAGE", f"invalid {data['type']}: {exc.error_count()} error(s)"
+        )

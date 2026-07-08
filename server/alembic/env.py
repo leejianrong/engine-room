@@ -3,9 +3,9 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from alembic import context
 from engine_room.config import settings
 from engine_room.persistence.models import Base
 

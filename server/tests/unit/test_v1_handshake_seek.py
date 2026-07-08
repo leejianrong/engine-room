@@ -3,7 +3,7 @@
 Primary WS test seam (PRD Option A). Asserts on the wire contract only.
 """
 
-from fake_client import connect
+from support.fake_client import connect
 
 
 def test_handshake_returns_welcome():

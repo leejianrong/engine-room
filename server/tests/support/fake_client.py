@@ -47,7 +47,10 @@ class FakeBot:
             {
                 "type": "seek",
                 "id": cid,
-                "time_control": {"base_seconds": base_seconds, "increment_seconds": increment_seconds},
+                "time_control": {
+                    "base_seconds": base_seconds,
+                    "increment_seconds": increment_seconds,
+                },
             }
         )
         return self.recv()  # seek_ack (or error)
@@ -66,7 +69,12 @@ class FakeBot:
                 board = chess.Board(msg["fen"])
                 move = rng.choice(list(board.legal_moves))
                 self.send(
-                    {"type": "move", "game_id": msg["game_id"], "ply": msg["ply"], "uci": move.uci()}
+                    {
+                        "type": "move",
+                        "game_id": msg["game_id"],
+                        "ply": msg["ply"],
+                        "uci": move.uci(),
+                    }
                 )
             elif kind == "move_ack":
                 continue

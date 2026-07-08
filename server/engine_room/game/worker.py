@@ -103,7 +103,7 @@ async def run_game(
                 "increment_seconds": game.time_control.increment_seconds,
             },
             "initial_fen": game.initial_fen,
-            "clocks": {"white_ms": clock.remaining_ms(chess.WHITE), "black_ms": clock.remaining_ms(chess.BLACK)},
+            "clocks": _clocks(clock).model_dump(),
         },
     )
 
@@ -141,7 +141,7 @@ async def run_game(
                 "uci": uci,
                 "san": san,
                 "fen": board.fen(),
-                "clocks": {"white_ms": clock.remaining_ms(chess.WHITE), "black_ms": clock.remaining_ms(chess.BLACK)},
+                "clocks": _clocks(clock).model_dump(),
                 "to_move": "white" if board.turn == chess.WHITE else "black",
             },
         )

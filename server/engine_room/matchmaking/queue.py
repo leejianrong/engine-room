@@ -11,15 +11,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Protocol
 
+from ..game.game import Participant
 from ..ids import new_id
 from ..protocol.messages import TimeControl
-from ..game.game import Participant
 
 if TYPE_CHECKING:
-    from ..ws.session import Session
     from ..game.game import Game
-    from ..game.registry import GameRegistry
     from ..game.house_bots import RandomBot
+    from ..game.registry import GameRegistry
+    from ..ws.session import Session
 
 
 @dataclass

@@ -57,9 +57,8 @@ async def bot_ws(websocket: WebSocket) -> None:
 
     # --- auth (stub: single dev token; real hashed keys in V2, ADR-0014) ---
     if _bearer_token(websocket) != settings.dev_bot_token:
-        await websocket.send_text(
-            Error(code="UNAUTHORIZED", message="bad or missing API key", fatal=True).model_dump_json()
-        )
+        unauthorized = Error(code="UNAUTHORIZED", message="bad or missing API key", fatal=True)
+        await websocket.send_text(unauthorized.model_dump_json())
         await websocket.close(_CLOSE_POLICY_VIOLATION)
         return
 
@@ -82,7 +81,9 @@ async def bot_ws(websocket: WebSocket) -> None:
         await websocket.close(_CLOSE_PROTOCOL_ERROR)
         return
     if not isinstance(msg, Hello):
-        await session.send(Error(code="INVALID_MESSAGE", message="expected hello first", fatal=True))
+        await session.send(
+            Error(code="INVALID_MESSAGE", message="expected hello first", fatal=True)
+        )
         await websocket.close(_CLOSE_PROTOCOL_ERROR)
         return
     if msg.protocol_version not in SUPPORTED_VERSIONS:
@@ -139,7 +140,9 @@ async def bot_ws(websocket: WebSocket) -> None:
                     Error(code="INVALID_MESSAGE", message="already handshaken", fatal=False)
                 )
             else:  # pragma: no cover - no other client models yet
-                await session.send(Error(code="INVALID_MESSAGE", message="unhandled type", fatal=False))
+                await session.send(
+                    Error(code="INVALID_MESSAGE", message="unhandled type", fatal=False)
+                )
     except WebSocketDisconnect:
         # Reconnect / seat cleanup on disconnect arrives in V4 (resilience).
         return
