@@ -3,7 +3,7 @@
 
 	// Backend base URL (cross-origin; CORS-enabled on the server).
 	// Override with VITE_API_BASE for non-default hosts.
-	const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
+	const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8001';
 
 	type Player = { name: string; rating: number };
 	type Move = { ply: number; san: string; uci: string };

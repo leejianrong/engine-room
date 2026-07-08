@@ -58,12 +58,12 @@ docker compose up -d db          # host port 5433
 cd server
 uv sync
 uv run alembic upgrade head
-uv run uvicorn engine_room.app:app --reload   # http://127.0.0.1:8000/health
+uv run uvicorn engine_room.app:app --reload --port 8001   # http://127.0.0.1:8001/health
 
 # 3. Frontend (see frontend/README.md)
 cd ../frontend
 npm install
-npm run dev                      # http://localhost:5173
+npm run dev                      # http://localhost:5174
 ```
 
 ## License

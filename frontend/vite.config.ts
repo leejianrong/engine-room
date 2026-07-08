@@ -3,6 +3,11 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	// Dev server on 5174 (5173 is used by another app); strict so it won't drift.
+	server: {
+		port: 5174,
+		strictPort: true
+	},
 	plugins: [
 		sveltekit({
 			compilerOptions: {

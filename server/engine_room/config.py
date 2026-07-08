@@ -16,10 +16,10 @@ class Settings(BaseSettings):
     dev_bot_token: str = "dev-token"
 
     # Browser origins allowed to call the API (spectator SSE from the SvelteKit
-    # dev server). Override with ER_CORS_ALLOW_ORIGINS as a JSON list.
+    # dev server on :5174). Override with ER_CORS_ALLOW_ORIGINS as a JSON list.
     cors_allow_origins: list[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ]
 
 

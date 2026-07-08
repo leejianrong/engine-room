@@ -15,9 +15,9 @@ uv sync
 # 3. Apply migrations
 uv run alembic upgrade head
 
-# 4. Run the API
-uv run uvicorn engine_room.app:app --reload
-# -> http://127.0.0.1:8000/health
+# 4. Run the API (port 8001; 8000 is used by another app)
+uv run uvicorn engine_room.app:app --reload --port 8001
+# -> http://127.0.0.1:8001/health
 
 # Tests (fake-protocol-client WS seam)
 uv run pytest
