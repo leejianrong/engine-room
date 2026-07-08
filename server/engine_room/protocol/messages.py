@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 
 class TimeControl(BaseModel):
@@ -26,6 +26,11 @@ class BotInfo(BaseModel):
     id: str
     name: str
     rating: int
+    # Owning user (None = house bot). Carried server-side for same-owner
+    # matchmaking exclusion (ADR-0016 H5); `exclude=True` keeps it OFF the wire —
+    # PROTOCOL.md's `bot`/`opponent` are {id,name,rating} only, and an opponent
+    # must never learn who owns a bot.
+    owner_id: Optional[str] = Field(default=None, exclude=True)
 
 
 # --- inbound (client -> server) ------------------------------------------------
