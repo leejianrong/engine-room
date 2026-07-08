@@ -72,6 +72,27 @@ def test_flag_on_time_loses():
     assert over["termination"] == "timeout"
 
 
+def test_your_turn_carries_opponents_last_move():
+    with connect() as bot:
+        bot.hello()
+        bot.seek()
+        bot.expect("game_start")
+        yt0 = bot.expect("your_turn")  # ply 0, last_move None
+        assert yt0["last_move"] is None
+
+        import chess
+
+        move = next(iter(chess.Board(yt0["fen"]).legal_moves)).uci()
+        bot.send({"type": "move", "game_id": yt0["game_id"], "ply": 0, "uci": move})
+        bot.expect("move_ack")
+        yt2 = bot.expect("your_turn")  # ply 2 — carries the house bot's reply
+
+    assert yt2["ply"] == 2
+    assert yt2["your_color"] == "white"
+    assert yt2["last_move"] is not None
+    assert "uci" in yt2["last_move"] and "san" in yt2["last_move"]
+
+
 def test_invalid_ply_is_reported_then_move_accepted():
     with connect() as bot:
         bot.hello()

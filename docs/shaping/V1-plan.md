@@ -4,6 +4,8 @@ shaping: true
 
 # V1 Plan — Skeleton thread
 
+**Status: ✅ complete (2026-07-08).** All 8 sub-steps shipped; 29 tests pass. Ports settled: backend **:8001**, frontend **:5174**, frontend↔backend over **CORS** (not a Vite proxy). Persistence layer added as an injectable finalizer (`create_app(finalizer=…)`) so WS-seam tests run DB-free.
+
 Implementation plan for slice **V1** (from Shape A, part A1). Higher levels: [slices.md](slices.md) (slice def), [shaping.md](shaping.md) (R's, Shape A, A1 breadboard U1–U2/N1–N10). This doc is ground truth for V1 implementation detail.
 
 ## Goal (definition of done)
@@ -137,22 +139,29 @@ loop:
 finalize(result, termination, board) → one txn; publish game_over
 ```
 
-## Build sub-steps (order within V1)
-1. **Scaffold** — `uv` project, FastAPI app factory, `config`, `docker-compose` Postgres, async engine, Alembic + `0001_games`, SvelteKit project. *Checkpoint: app boots, migration applies.*
-2. **Handshake + seek (N1/N2)** — `/api/bot/v1`, stub-auth, `hello`/`welcome`/`seek`/`seek_ack`. *Checkpoint: fake client completes handshake + seek.*
-3. **Pair + house bot (N3/N4)** — always-pair matcher behind interface, HouseSeat/RandomBot, `game_start`. *Checkpoint: fake client receives `game_start` vs house.*
-4. **Game loop + clock (N5/N6)** — `your_turn`/`move`/`move_ack`, python-chess apply/terminal, clock + flag. *Checkpoint: a full game completes to a terminal in memory.*
-5. **PubSub + SSE (N7/N9)** — in-proc bus, SSE endpoint. *Checkpoint: curl the SSE stream, see move events.*
-6. **Finalize (N8/N10)** — atomic Game write. *Checkpoint: `games` row after a game.*
-7. **SvelteKit view (U1/U2)** — `+page.svelte` EventSource move list + status. *Checkpoint: browser shows live moves — the V1 demo.*
-8. **Tests** — see below. *Checkpoint: WS-seam suite green.*
+## Build sub-steps (order within V1) — all ✅ done
+1. ✅ **Scaffold** — `uv` project, FastAPI app factory, `config`, `docker-compose` Postgres, async engine, Alembic + `0001_games`, SvelteKit project. *(app boots, migration applies)*
+2. ✅ **Handshake + seek (N1/N2)** — `/api/bot/v1`, stub-auth, `hello`/`welcome`/`seek`/`seek_ack`.
+3. ✅ **Pair + house bot (N3/N4)** — always-pair matcher behind interface, HouseSeat/RandomBot, `game_start`.
+4. ✅ **Game loop + clock (N5/N6)** — `your_turn`/`move`/`move_ack`, python-chess apply/terminal, clock + flag.
+5. ✅ **PubSub + SSE (N7/N9)** — in-proc bus, SSE endpoint (initial `: connected` flush; curl shows move events).
+6. ✅ **Finalize (N8/N10)** — atomic Game write via injectable `PostgresFinalizer`.
+7. ✅ **SvelteKit view (U1/U2)** — `+page.svelte` EventSource → board(FEN)/move list/clocks/status; CORS on the backend.
+8. ✅ **Tests + cleanup** — 29 tests; ruff clean.
 
-## Tests (primary WS seam — PRD Option A)
-`tests/fake_client.py`: a `FakeBot` over Starlette `TestClient.websocket_connect` with `hello()/seek()/expect(type)/move(uci)` helpers; SSE asserted via `TestClient` streaming GET.
-- `test_v1_happy_path` — connect→seek→`game_start`→`your_turn`/`move` loop vs house→`game_over` with a real result and non-empty PGN.
-- `test_v1_clock_flag` — a `FakeBot` that never answers `your_turn` flags; `game_over.termination=="timeout"`, opponent wins.
-- `test_v1_finalization` — after a game, exactly one `games` row with matching result/termination/final_fen/pgn.
-- (legality of house moves is implicitly covered — RandomBot only emits legal UCI; malformed-frame *forfeit* semantics are deferred to V4, asserted there.)
+> Tests were built incrementally per sub-step rather than deferred to step 8, so the WS-seam suite grew alongside the code.
+
+## Tests (primary WS seam — PRD Option A) — as built, 29 total
+`tests/fake_client.py`: a `FakeBot` over Starlette `TestClient.websocket_connect` with `hello()/seek()/expect()/play_out()` helpers.
+- **handshake/seek** (`test_v1_handshake_seek.py`, 8) — welcome, seek_ack, unauthorized, unsupported version, seek-before-hello, non-fatal junk/malformed.
+- **pairing** (`test_v1_pairing.py`, 3) — `game_start` vs house, 5+0 clocks, distinct games.
+- **game loop** (`test_v1_game_loop.py`, 6) — full random game→terminal+PGN, first your_turn (White/ply0), move_ack id echo, `last_move` wiring, flag-on-time, invalid-ply recovery.
+- **worker mapping** (`test_v1_worker.py`, 4) — deterministic checkmate/stalemate/insufficient → result+termination; PGN headers/moves.
+- **pubsub** (`test_pubsub.py`, 4) — fan-out, unsubscribe, isolation, no-subscriber no-op.
+- **spectate** (`test_v1_spectate.py`, 2) — worker event content; SSE 404. **live e2e** (`test_v1_spectate_live.py`, 1) — real uvicorn + real bot WS + real HTTP SSE shows move events (httpx ASGITransport buffers, so a live server is required).
+- **finalization** (`test_v1_finalize.py`, 1) — one `games` row with matching fields (skips if Postgres down).
+
+Note: malformed-frame/illegal-move *forfeit* semantics are deferred to V4; V1 reports+ignores and keeps the clock running.
 
 ## Out of scope (pinned to the slice that proves it)
 Auth→V2 · Elo/pools/TTL/same-owner→V3 · reconnect/`ply`-idempotency/heartbeat/illegal-forfeit→V4 · resign/draw/auto-draw/real-Elo→V5 · catch-up-snapshot/replay/lobby/styling→V6 · packaged SDK/quickstart/UCI-bridge→V7 · 5+0→V3.

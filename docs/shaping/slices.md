@@ -17,7 +17,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 
 | Slice | From part | Goal (the demo) | Thickens |
 |-------|-----------|-----------------|----------|
-| **V1** | A1 | Stub-auth bot ↔ house `RandomBot` plays a full real 3+0 game under the server clock; moves stream to a bare page; result+PGN in Postgres | — (skeleton) |
+| **V1** ✅ | A1 | Stub-auth bot ↔ house `RandomBot` plays a full real 3+0 game under the server clock; moves stream live to a SvelteKit page; result+PGN in Postgres | — (skeleton) |
 | **V2** | A2 | Sign in with GitHub, create a bot, get a key once; the **real key** authenticates the WS handshake (stub-auth removed) | N1 auth; +REST bot-CRUD; newest-wins |
 | **V3** | A3 | Two real user bots get matched by Elo in a 3+0 pool; same-owner bots never paired; a lonely seek expires | N3 matcher → pools |
 | **V4** | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
@@ -31,7 +31,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 
 ## V1 — Skeleton thread
 
-**Status:** ready to plan (next artifact: `V1-plan.md`).
+**Status:** ✅ **complete** (2026-07-08). Built in 8 sub-steps (see `V1-plan.md`); the walking skeleton runs end-to-end: connect → seek → pair vs house → play under the server clock → stream to spectators via SSE → render live in a SvelteKit page → persist to Postgres. 29 tests pass (primary WS seam + pubsub/SSE + live-server e2e + Postgres finalization). Ports: backend :8001, frontend :5174; frontend↔backend via CORS.
 
 ### Demo (definition of done for the slice)
 Run the server. Run a stub bot-client script. Observe: it connects, seeks 3+0, is paired with the in-process house `RandomBot`, and a full legal game plays out to a natural terminal (checkmate/stalemate) or a **timeout** if a side runs out of clock. A bare web page shows each move appear live. When the game ends, a `games` row exists in Postgres with the result, termination reason, final FEN, and full PGN.
