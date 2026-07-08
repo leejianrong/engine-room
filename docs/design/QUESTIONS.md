@@ -94,8 +94,8 @@ Legend for leverage: ⭐️ = high-leverage (drives many downstream decisions).
 - 🟢 K1. ⭐️ → **Python + FastAPI** backend, **Postgres** records, **TypeScript** frontend (ADR-0005).
 - 🟢 N1. → **Svelte** (flip to React on preference) (ADR-0017).
 - 🟢 K2. → **Single game-process at MVP**; scale via **Redis-bridged edge/home worker** (global Redis queues, game→worker registry, bot bus == spectator bus) (ADR-0020).
-- 🔴 K3. Hosting target (single VM, container platform, serverless)? Does serverless's connection model conflict with persistent WebSockets?
-- 🔴 K4. Target concurrent live games and concurrent bot connections at MVP?
+- 🟢 K3. → **Fly.io** (a single always-on machine — the MVP is one in-memory game-worker, ADR-0018/0020, so no autoscale / no scale-to-zero) + **Neon** managed Postgres; frontend on a separate origin via CORS (Bearer-JWT auth). **Serverless was rejected** for the MVP precisely because its autoscaling + scale-to-zero + request lifecycle conflict with persistent WebSockets and single-process in-memory state (ADR-0026). Deploy is CI-gated (`deploy.yml`); see `docs/DEPLOY.md`.
+- 🔴 K4. Target concurrent live games and concurrent bot connections at MVP? *(Doesn't change the host — smallest Fly VM covers the MVP — but pin a number before a real launch to size up. ADR-0026.)*
 
 ## L. Adapter / developer experience (REQS open question)
 - 🟢 L1. → **Yes, official Python SDK** at launch (own repo, decoupled, protocol-spec-only dependency) (ADR-0021).

@@ -1,0 +1,32 @@
+# Deploy the backend to Fly.io — decoupled from CI via `workflow_run` so it runs
+# only after CI *completes successfully on main*, deploying the exact validated
+# commit (not "latest main"). Disarmed by default: set repo variable
+# DEPLOY_ENABLED=true and secret FLY_API_TOKEN to turn it on (see docs/DEPLOY.md).
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  deploy:
+    # Only on a green CI run for main, and only once armed.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: true   # a newer merge supersedes an in-flight deploy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}  # the commit CI validated
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy to Fly
+        working-directory: server                          # fly.toml + Dockerfile live here
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
