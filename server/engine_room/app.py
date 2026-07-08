@@ -10,12 +10,19 @@ from . import __version__
 from .game.house_bots import RandomBot
 from .game.registry import GameRegistry
 from .matchmaking.queue import AlwaysPairQueue
+from .persistence.finalize import PostgresFinalizer
 from .pubsub.inproc import InProcPubSub
 from .spectate.sse import router as spectate_router
 from .ws.bot_endpoint import router as bot_router
 
 
-def create_app() -> FastAPI:
+def create_app(finalizer=None) -> FastAPI:
+    """Application factory.
+
+    `finalizer` is the game-finalization hook (dependency-injected). Left None
+    (the factory default) games are not persisted — handy for fast tests. The
+    production entrypoint below wires a PostgresFinalizer.
+    """
     app = FastAPI(title="Engine Room", version=__version__)
 
     # Single-process MVP state (ADR-0020); matchmaking + pubsub sit behind their
@@ -26,6 +33,7 @@ def create_app() -> FastAPI:
     app.state.matchmaking_queue = AlwaysPairQueue(
         app.state.game_registry, app.state.house_bot
     )
+    app.state.finalizer = finalizer
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -36,4 +44,5 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+# Production wiring: persist finished games to Postgres.
+app = create_app(finalizer=PostgresFinalizer())

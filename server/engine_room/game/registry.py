@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from ..ids import new_id
@@ -25,6 +26,7 @@ class GameRegistry:
             initial_fen=STANDARD_START_FEN,
             white_ms=base_ms,
             black_ms=base_ms,
+            created_at=datetime.now(timezone.utc),
             state="paired",
         )
         self._games[game.id] = game

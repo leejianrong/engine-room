@@ -8,6 +8,7 @@ clocks-running, and terminal handling arrive with the game loop (sub-step 4).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import chess
@@ -42,4 +43,5 @@ class Game:
     initial_fen: str
     white_ms: int
     black_ms: int
+    created_at: datetime
     state: str = "paired"  # paired | in_progress | finished | aborted

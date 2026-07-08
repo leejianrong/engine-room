@@ -123,7 +123,11 @@ async def bot_ws(websocket: WebSocket) -> None:
                 if result.game is not None:
                     await session.send(_game_start_for(result.game, session))
                     task = asyncio.create_task(
-                        run_game(result.game, websocket.app.state.pubsub)
+                        run_game(
+                            result.game,
+                            websocket.app.state.pubsub,
+                            websocket.app.state.finalizer,
+                        )
                     )
                     _running_games.add(task)
                     task.add_done_callback(_running_games.discard)

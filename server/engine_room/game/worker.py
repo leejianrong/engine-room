@@ -9,7 +9,7 @@ spectator fan-out (N7/N9) hook in at later sub-steps.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 import chess
 import chess.pgn
@@ -22,6 +22,9 @@ from .seat import HouseSeat, WsSeat
 
 if TYPE_CHECKING:
     from ..pubsub.base import PubSub
+
+# (game, result, termination, final_fen, pgn) -> None
+Finalizer = Callable[[Game, str, str, str, str], Awaitable[None]]
 
 # python-chess termination -> ADR-0008 termination-reason vocabulary
 _TERMINATION = {
@@ -67,11 +70,15 @@ def _render_pgn(game: Game, board: chess.Board) -> str:
     return str(pgn_game)
 
 
-async def run_game(game: Game, pubsub: "PubSub") -> tuple[str, str]:
+async def run_game(
+    game: Game, pubsub: "PubSub", finalizer: Optional[Finalizer] = None
+) -> tuple[str, str]:
     """Play the game to a terminal; return (result, termination).
 
     Publishes spectator events (game_start / move / game_over) to the game's
-    channel via `pubsub` (N7) as the game unfolds.
+    channel via `pubsub` (N7) as the game unfolds. On the terminal, if a
+    `finalizer` is provided, the durable record is written before the bots are
+    notified (N8); when None, persistence is skipped.
     """
     board = chess.Board(game.initial_fen)
     clock = Clock(game.white_ms, game.black_ms)
@@ -148,6 +155,8 @@ async def run_game(game: Game, pubsub: "PubSub") -> tuple[str, str]:
     game.state = "finished"
     final_fen = board.fen()
     pgn = _render_pgn(game, board)
+    if finalizer is not None:
+        await finalizer(game, result, termination, final_fen, pgn)
     for seat in seats.values():
         await seat.game_over(result=result, termination=termination, final_fen=final_fen, pgn=pgn)
     await pubsub.publish(
