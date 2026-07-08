@@ -67,6 +67,22 @@ class SeekAck(BaseModel):
     id: Optional[str] = None  # echoes the client's seek correlation id
 
 
+class Clocks(BaseModel):
+    white_ms: int
+    black_ms: int
+
+
+class GameStart(BaseModel):
+    type: Literal["game_start"] = "game_start"
+    game_id: str
+    your_color: str  # "white" | "black"
+    opponent: BotInfo
+    time_control: TimeControl
+    initial_fen: str
+    clocks: Clocks
+    start_grace_ms: int = 10000  # PAIRED->IN_PROGRESS grace (ADR-0016 E7)
+
+
 class Error(BaseModel):
     type: Literal["error"] = "error"
     code: str

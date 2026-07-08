@@ -8,10 +8,13 @@ reconnect arrive in later sub-steps.
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..config import settings
+from ..game.game import Game
 from ..ids import new_id
 from ..protocol.messages import (
     BotInfo,
+    Clocks,
     Error,
+    GameStart,
     Hello,
     ProtocolError,
     Seek,
@@ -108,8 +111,10 @@ async def bot_ws(websocket: WebSocket) -> None:
                 continue
 
             if isinstance(msg, Seek):
-                seek_id = await queue.add_seek(session, msg.time_control)
-                await session.send(SeekAck(id=msg.id, seek_id=seek_id, status="queued"))
+                result = await queue.seek(session, msg.time_control)
+                await session.send(SeekAck(id=msg.id, seek_id=result.seek_id, status="queued"))
+                if result.game is not None:
+                    await session.send(_game_start_for(result.game, session))
             elif isinstance(msg, Hello):
                 await session.send(
                     Error(code="INVALID_MESSAGE", message="already handshaken", fatal=False)
@@ -117,5 +122,21 @@ async def bot_ws(websocket: WebSocket) -> None:
             else:  # pragma: no cover - no other client models yet
                 await session.send(Error(code="INVALID_MESSAGE", message="unhandled type", fatal=False))
     except WebSocketDisconnect:
-        # Seek cleanup on disconnect arrives with matchmaking in sub-step 3 / V3.
+        # Reconnect / seat cleanup on disconnect arrives in V4 (resilience).
         return
+
+
+def _game_start_for(game: Game, session: Session) -> GameStart:
+    """Build game_start from the given session's perspective."""
+    if game.white.session is session:
+        your_color, opponent = "white", game.black.bot
+    else:
+        your_color, opponent = "black", game.white.bot
+    return GameStart(
+        game_id=game.id,
+        your_color=your_color,
+        opponent=opponent,
+        time_control=game.time_control,
+        initial_fen=game.initial_fen,
+        clocks=Clocks(white_ms=game.white_ms, black_ms=game.black_ms),
+    )

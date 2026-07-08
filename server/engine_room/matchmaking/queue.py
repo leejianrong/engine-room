@@ -1,47 +1,57 @@
-"""Matchmaking queue behind an interface (R6, ADR-0025).
+"""Matchmaking behind an interface (R6, ADR-0025).
 
-V1 sub-step 2 only *records* seeks and hands back a seek_id for the ack. The
-always-pair-vs-house-bot behavior (sub-step 3) and real Elo pools / TTL /
-same-owner exclusion (V3) swap in behind this same interface — the WS endpoint
-never changes. A Redis-backed impl slots in here at multi-worker scale-out.
+V1 sub-step 3 = AlwaysPairQueue: every seek is immediately paired against a
+house bot, so a newcomer always gets a game (ADR-0022). Real Elo pools / TTL /
+same-owner exclusion (V3) and a Redis-backed impl (scale-out) swap in behind
+this same `MatchmakingQueue` interface — the WS endpoint never changes.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Optional, Protocol
 
 from ..ids import new_id
 from ..protocol.messages import TimeControl
+from ..game.game import Participant
 
 if TYPE_CHECKING:
     from ..ws.session import Session
+    from ..game.game import Game
+    from ..game.registry import GameRegistry
+    from ..game.house_bots import RandomBot
 
 
 @dataclass
-class Ticket:
+class PairResult:
+    """Outcome of a seek: always a seek_id; a game if pairing happened now."""
+
     seek_id: str
-    session: "Session"
-    time_control: TimeControl
+    game: Optional["Game"] = None
 
 
 class MatchmakingQueue(Protocol):
-    async def add_seek(self, session: "Session", time_control: TimeControl) -> str:
-        """Enqueue a seek; return its seek_id."""
+    async def seek(self, session: "Session", time_control: TimeControl) -> PairResult:
         ...
 
     async def cancel(self, seek_id: str) -> None:
         ...
 
 
-class InMemoryQueue:
-    def __init__(self) -> None:
-        self._tickets: dict[str, Ticket] = {}
+class AlwaysPairQueue:
+    def __init__(self, registry: "GameRegistry", house: "RandomBot") -> None:
+        self._registry = registry
+        self._house = house
 
-    async def add_seek(self, session: "Session", time_control: TimeControl) -> str:
-        seek_id = new_id("seek")
-        self._tickets[seek_id] = Ticket(seek_id, session, time_control)
-        return seek_id
+    async def seek(self, session: "Session", time_control: TimeControl) -> PairResult:
+        # V1: the seeking bot takes White; the house bot takes Black.
+        game = self._registry.create_game(
+            white=Participant(bot=session.bot, session=session),
+            black=Participant(bot=self._house.info, is_house=True, house=self._house),
+            time_control=time_control,
+        )
+        return PairResult(seek_id=new_id("seek"), game=game)
 
     async def cancel(self, seek_id: str) -> None:
-        self._tickets.pop(seek_id, None)
+        # No queue wait in always-pair mode; nothing to cancel. Real TTL/cancel in V3.
+        return None

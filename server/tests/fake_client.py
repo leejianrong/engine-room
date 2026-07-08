@@ -30,6 +30,11 @@ class FakeBot:
     def recv(self) -> dict:
         return self.ws.receive_json()
 
+    def expect(self, type_: str) -> dict:
+        msg = self.recv()
+        assert msg.get("type") == type_, f"expected {type_!r}, got {msg}"
+        return msg
+
     # protocol helpers
     def hello(self, protocol_version: str = "1.0") -> dict:
         self.send({"type": "hello", "protocol_version": protocol_version, "sdk": "fake/0"})
