@@ -122,7 +122,9 @@ async def bot_ws(websocket: WebSocket) -> None:
                 await session.send(SeekAck(id=msg.id, seek_id=result.seek_id, status="queued"))
                 if result.game is not None:
                     await session.send(_game_start_for(result.game, session))
-                    task = asyncio.create_task(run_game(result.game))
+                    task = asyncio.create_task(
+                        run_game(result.game, websocket.app.state.pubsub)
+                    )
                     _running_games.add(task)
                     task.add_done_callback(_running_games.discard)
             elif isinstance(msg, Move):

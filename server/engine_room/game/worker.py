@@ -9,14 +9,19 @@ spectator fan-out (N7/N9) hook in at later sub-steps.
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 import chess
 import chess.pgn
 
+from ..channels import game_channel
 from ..protocol.messages import Clocks
 from .clock import Clock
 from .game import Game
 from .seat import HouseSeat, WsSeat
+
+if TYPE_CHECKING:
+    from ..pubsub.base import PubSub
 
 # python-chess termination -> ADR-0008 termination-reason vocabulary
 _TERMINATION = {
@@ -62,8 +67,12 @@ def _render_pgn(game: Game, board: chess.Board) -> str:
     return str(pgn_game)
 
 
-async def run_game(game: Game) -> tuple[str, str]:
-    """Play the game to a terminal; return (result, termination)."""
+async def run_game(game: Game, pubsub: "PubSub") -> tuple[str, str]:
+    """Play the game to a terminal; return (result, termination).
+
+    Publishes spectator events (game_start / move / game_over) to the game's
+    channel via `pubsub` (N7) as the game unfolds.
+    """
     board = chess.Board(game.initial_fen)
     clock = Clock(game.white_ms, game.black_ms)
     inc_ms = game.time_control.increment_seconds * 1000
@@ -71,9 +80,26 @@ async def run_game(game: Game) -> tuple[str, str]:
         chess.WHITE: _make_seat(game.white, game.id, "white"),
         chess.BLACK: _make_seat(game.black, game.id, "black"),
     }
+    channel = game_channel(game.id)
     loop = asyncio.get_event_loop()
 
     game.state = "in_progress"
+    await pubsub.publish(
+        channel,
+        {
+            "type": "game_start",
+            "game_id": game.id,
+            "white": {"name": game.white.bot.name, "rating": game.white.bot.rating},
+            "black": {"name": game.black.bot.name, "rating": game.black.bot.rating},
+            "time_control": {
+                "base_seconds": game.time_control.base_seconds,
+                "increment_seconds": game.time_control.increment_seconds,
+            },
+            "initial_fen": game.initial_fen,
+            "clocks": {"white_ms": clock.remaining_ms(chess.WHITE), "black_ms": clock.remaining_ms(chess.BLACK)},
+        },
+    )
+
     ply = 0
     last_move = None
     result = termination = None
@@ -100,6 +126,18 @@ async def run_game(game: Game) -> tuple[str, str]:
         clock.credit_increment(color, inc_ms)  # 0 at MVP
         await seat.confirm_move(ply)
         last_move = {"uci": uci, "san": san}
+        await pubsub.publish(
+            channel,
+            {
+                "type": "move",
+                "ply": ply,
+                "uci": uci,
+                "san": san,
+                "fen": board.fen(),
+                "clocks": {"white_ms": clock.remaining_ms(chess.WHITE), "black_ms": clock.remaining_ms(chess.BLACK)},
+                "to_move": "white" if board.turn == chess.WHITE else "black",
+            },
+        )
         ply += 1
 
         outcome = board.outcome()  # automatic terminals (no claim); auto-draws are V5
@@ -112,4 +150,14 @@ async def run_game(game: Game) -> tuple[str, str]:
     pgn = _render_pgn(game, board)
     for seat in seats.values():
         await seat.game_over(result=result, termination=termination, final_fen=final_fen, pgn=pgn)
+    await pubsub.publish(
+        channel,
+        {
+            "type": "game_over",
+            "game_id": game.id,
+            "result": result,
+            "termination": termination,
+            "final_fen": final_fen,
+        },
+    )
     return result, termination
