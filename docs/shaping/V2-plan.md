@@ -4,9 +4,11 @@ shaping: true
 
 # V2 Plan — Real identity
 
-**Status: 🟢 CONFIRMED — implementing (2026-07-08).** The four open decisions (D-i … D-l)
-were confirmed by the owner on 2026-07-08 (all four recommendations accepted). All decisions
-are now pinned; implementation proceeds sub-step by sub-step on `feat/v2-identity`.
+**Status: ✅ COMPLETE (2026-07-08).** Built in 6 sub-steps (the frontend sub-step dropped per
+D-j) on `feat/v2-identity` (PR #1); 41 unit + 17 integration tests pass, ruff clean. GitHub
+OAuth sign-in, bot CRUD (5/user cap), rotatable HMAC-hashed keys (shown once), real WS-handshake
+key auth + newest-wins, and `games` bot FKs all land. The four open decisions (D-i … D-l) were
+confirmed by the owner (all recommendations accepted) and are pinned below.
 
 Implementation plan for slice **V2** (from Shape A, part A2). Higher levels:
 [slices.md](slices.md) (V2 row), [shaping.md](shaping.md) (R's, Shape A, A2 thickening row).

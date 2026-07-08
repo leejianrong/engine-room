@@ -1,7 +1,8 @@
 # Workflow adoption — status
 
 Tracks how much of [DEVELOPER-WORKFLOWS.md](DEVELOPER-WORKFLOWS.md) (the portable playbook)
-engine-room has adopted. **Phases A–C are done; Phase D is deferred.**
+engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2** (branch
+protection pending a repo-plan change); Playwright + deploy still deferred.
 
 ## Adopted (Phases A–C, 2026-07-08)
 
@@ -14,14 +15,20 @@ engine-room has adopted. **Phases A–C are done; Phase D is deferred.**
 | **Pre-push hook** (§3) | `scripts/git-hooks/pre-push` runs `ruff` + `pytest tests/unit` + `npm run check`. Install once: `ln -sf ../../scripts/git-hooks/pre-push .git/hooks/pre-push`. |
 | **CI** (§4) | `.github/workflows/ci.yml` — parallel `lint` / `unit` / `integration` / `frontend` jobs on every PR + push to `main`; `uv run --frozen`, `npm ci`, dep caching. |
 
-Test counts today: **27 unit + 2 integration = 29**, ruff clean.
+Test counts today: **41 unit + 17 integration = 58**, ruff clean (V2).
+
+## Adopted at V2 (Phase D — branch/PR flow)
+
+| Playbook item | Here |
+|---------------|------|
+| **Branch-per-slice + PR-only merges** (§6) | V2 built on `feat/v2-identity`, small per-sub-step commits, opened as **PR #1**; CI gates the merge. This is the standing convention from V2 on (CLAUDE.md "Workflow conventions"). |
 
 ## Deferred to Phase D
 
 | Item | Why not yet | Trigger to do it |
 |------|-------------|------------------|
-| **Playwright browser e2e** (§1b) | Heaviest item; the live-server SSE test already covers the data path end-to-end. The gap is pixel-level DOM rendering. | After V2, or when a UI regression needs guarding. |
-| **Branch-per-slice + PR-only + protected `main`** (§6) | V1 was bootstrapped with small commits straight to `main`. | Adopt starting **V2** — `feat/v2-identity` branch, PR, CI-green-to-merge, branch-protection rule. |
+| **Server-enforced branch protection on `main`** (§6) | GitHub refuses branch-protection rules on a **private repo without GitHub Pro** (403). The branch/PR discipline is followed by convention meanwhile. | Make the repo public, or upgrade to Pro; then `PUT /repos/:owner/:repo/branches/main/protection` requiring the `lint`/`unit`/`integration`/`frontend` checks. |
+| **Playwright browser e2e** (§1b) | Heaviest item; the live-server SSE test already covers the data path end-to-end. The gap is pixel-level DOM rendering. | When a UI regression needs guarding (V6 dashboard). |
 | **Deploy gated on CI** (§5) | Hosting target is undecided — **QUESTIONS.md K3** is still open. The playbook deploys to Fly.io; we haven't chosen. | When K3 is decided. |
 
 ## Deliberate divergences from the playbook

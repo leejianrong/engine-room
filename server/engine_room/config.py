@@ -11,15 +11,9 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://engine_room:engine_room@localhost:5433/engine_room"
     )
 
-    # V1 stub auth (ADR-0014 real keys arrive in V2 / slice A2). Any bot presenting
-    # this bearer token at the WebSocket handshake is accepted.
-    #
-    # V2 (slice A2) authenticates real per-bot keys instead; the WS endpoint no
-    # longer consults this. Retained so the field is not a breaking removal and so
-    # any lingering tooling that sets ER_DEV_BOT_TOKEN doesn't error.
-    dev_bot_token: str = "dev-token"
-
     # --- V2 identity (slice A2) ---
+    # (V1's stub `dev_bot_token` is gone — the WS handshake now authenticates real
+    # per-bot API keys via PostgresBotAuthenticator; ER_DEV_BOT_TOKEN is ignored.)
     # Human login sessions: FastAPI-Users stateless JWT (D-l). Signs the JWT and
     # the OAuth `state` param. MUST be overridden in production (ER_AUTH_SECRET).
     auth_secret: str = "dev-auth-secret-change-me-in-production-0123456789"  # ≥32B

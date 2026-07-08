@@ -28,3 +28,9 @@ Bots authenticate to open a Session and hold a MatchmakingTicket (ADR-0009, ADR-
 - Follow-on questions opened:
   - A6 (still to ratify): when a *second* valid handshake arrives while a live Session exists — **newest-wins/replace** (cleanly implements reconnect over a half-dead socket) vs **reject-new**. Lean: newest-wins.
   - B6 residual: does the handshake also carry a protocol **version**? (minor; likely a header field.)
+
+## Update — implemented in V2 (2026-07-08)
+
+- **Hashing (D-k, refines "salted"):** keys are stored as **`HMAC-SHA256(server pepper, key)`**, an indexed unique `key_hash`, not a per-row salted+slow hash. A per-row salt is incompatible with the O(1) key→bot lookup the WS handshake needs, and a 256-bit random token has no dictionary to attack, so a fast **keyed** hash is the right tool. The pepper (`ER_API_KEY_PEPPER`) preserves the ADR's intent — a DB leak alone yields no usable credentials. Token format: `crbk_<43 base62>` (~256 bits); a non-secret `key_prefix` is stored for display.
+- **A6 ratified → newest-wins.** A second authenticated handshake replaces the prior live Session (in-memory `SessionRegistry`, single process); the old socket is closed with a `SESSION_REPLACED` error (WS close 4001). Key **rotation** likewise evicts + closes the live session immediately. *Mid-game seat reconnect/resume* (`welcome.active_game`) remains V4 — V2 proves session replacement only.
+- **B6:** the protocol version is exchanged in the `hello`/`welcome` body (PROTOCOL.md §2), not a header.
