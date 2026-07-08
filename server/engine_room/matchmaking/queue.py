@@ -37,6 +37,14 @@ class MatchmakingQueue(Protocol):
     async def cancel(self, seek_id: str) -> None:
         ...
 
+    async def start(self) -> None:
+        """Start any background matcher loop (V3). No-op for eager impls."""
+        ...
+
+    async def stop(self) -> None:
+        """Stop the background matcher loop on shutdown."""
+        ...
+
 
 class AlwaysPairQueue:
     def __init__(self, registry: "GameRegistry", house: "RandomBot") -> None:
@@ -54,4 +62,10 @@ class AlwaysPairQueue:
 
     async def cancel(self, seek_id: str) -> None:
         # No queue wait in always-pair mode; nothing to cancel. Real TTL/cancel in V3.
+        return None
+
+    async def start(self) -> None:  # eager: no background loop
+        return None
+
+    async def stop(self) -> None:
         return None
