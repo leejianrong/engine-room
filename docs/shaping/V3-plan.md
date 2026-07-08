@@ -4,9 +4,13 @@ shaping: true
 
 # V3 Plan — Real matchmaking
 
-**Status: 🟢 CONFIRMED (2026-07-08) — the four open decisions (D-i … D-iv) were confirmed by the
-owner; implementation in progress on `feat/v3-matchmaking`.** This file follows V1/V2-plan and
-records the pinned choices + per-sub-step progress.
+**Status: ✅ COMPLETE (2026-07-09).** Built in 6 sub-steps on `feat/v3-matchmaking`; the four
+open decisions (D-i … D-iv) were confirmed by the owner and are pinned below. `AlwaysPairQueue` is
+replaced by an Elo widening-window matcher behind `MatchmakingQueue`; 3+0 **and** 5+0 pools,
+same-owner exclusion, soft anti-rematch, seek TTL/cancel, start-grace reap, async `game_start`, and
+an on-demand greeter all land. Ratings stay read-only (updates are V5). No schema change. Unit
+tests drive the matcher/pool logic DB-free with an injectable clock; a live-uvicorn two-bot test
+covers the WS seam. Full gate green.
 
 Implementation plan for slice **V3** (from Shape A, part A3). Higher levels:
 [slices.md](slices.md) (V3 row), [shaping.md](shaping.md) (R's, Shape A, A3 thickening row).
@@ -147,13 +151,13 @@ class GameLauncher(Protocol):
 Per pool, in order:
 1. **Reap** tickets whose `session` is no longer `session_registry.current(bot_id)` (disconnected /
    replaced) — drop silently (the endpoint's disconnect path also `cancel`s).
-2. **Expire** tickets with `now - enqueued_at ≥ TTL` → send `seek_ended{expired}` on that session,
+2. ✅ **Expire** tickets with `now - enqueued_at ≥ TTL` → send `seek_ended{expired}` on that session,
    remove.
-3. **Pair reals**: process oldest-first; for each unpaired ticket `t`, `best_opponent(t, pool, now,
+3. ✅ **Pair reals**: process oldest-first; for each unpaired ticket `t`, `best_opponent(t, pool, now,
    excluded=antirematch(t))`; if found, `registry.create_game(white, black, tc)` (color by coin/oldest
    = White), record last-opponent (D-f), `await launcher.launch(game)`, remove both. Repeat until no
    pair.
-4. **Greeter fallback** (if pool `greeter` enabled, D-i): any ticket with `now - enqueued_at ≥ H`
+4. ✅ **Greeter fallback** (if pool `greeter` enabled, D-i): any ticket with `now - enqueued_at ≥ H`
    and still unpaired → create a game vs a synthesized house `Participant`, `launcher.launch`, remove.
 
 `seek()` enrolls the ticket, `event.set()` (nudge the loop), returns `PairResult(seek_id)`.
@@ -172,8 +176,17 @@ class SeekEnded(BaseModel):       # outbound
 # add "seek_cancel": SeekCancel to _CLIENT_MODELS
 ```
 
-## Build sub-steps (order within V3) — each ends in a demoable/testable checkpoint
-1. **Config knobs + protocol messages.** Add `ER_MM_*` settings (D-e); `SeekCancel`/`SeekEnded` +
+## Build sub-steps (order within V3) — all ✅ done
+> Deviations from the plan as built: (a) the affected V1/V2 tests were migrated in the **same**
+> commit as the create_app swap (sub-step 5), not a trailing sub-step 6, so every commit kept the
+> gate green — done via an `always_pair=True` escape hatch on `create_app`/`connect` rather than
+> rewriting each game-loop test onto the async matcher. (b) Start-grace (D-g) is realized as a
+> **reap-before-pair** in `tick()` step 1 (a ticket whose session vanished is dropped before it can
+> be paired; the survivor stays enrolled) rather than an abort-at-launch — simpler and it needs no
+> ABORTED game. (c) `owner_id` reaches the matcher via a **wire-excluded** `BotInfo.owner_id` field
+> (no authenticator return-type change), keeping ownership off the wire (H5).
+
+1. ✅ **Config knobs + protocol messages.** Add `ER_MM_*` settings (D-e); `SeekCancel`/`SeekEnded` +
    parse-map entry. **Checkpoint:** unit — parse `seek_cancel`; settings default/override.
 2. **Pool + Elo eligibility (pure).** `ticket.py`, `pool.py`, `elo.py`. **Checkpoint:** unit —
    `rating_window` schedule; `eligible` (same-owner, within/without window); `best_opponent`
@@ -187,12 +200,12 @@ class SeekEnded(BaseModel):       # outbound
    (lifespan start/stop) replacing `AlwaysPairQueue`. **Checkpoint:** unit — drive `tick()` directly:
    two reals pair by Elo; same-owner never pair; far ratings pair only after widening (advance fake
    clock); TTL→`seek_ended{expired}`; `cancel`→`seek_ended{cancelled}`; greeter fallback after `H`.
-5. **WS endpoint async seek + seek_cancel.** `seek`→`seek_ack` only; route `seek_cancel`→`cancel`;
+5. ✅ **WS endpoint async seek + seek_cancel.** `seek`→`seek_ack` only; route `seek_cancel`→`cancel`;
    remove inline game spawn; matcher/launcher deliver `game_start`. Teach `fake_client.py`
    `seek_cancel`/`expect seek_ended`, and a two-bot live helper. **Checkpoint:** live-uvicorn
    integration (D-iv) — two real bots matched to each other + play out; same-owner pair never matched;
    lonely seek → `seek_ended{expired}` (tiny TTL).
-6. **Migrate V1/V2 tests to async game_start + docs/cleanup.** Update `test_v1_pairing.py`,
+6. ✅ **Migrate V1/V2 tests to async game_start + docs/cleanup.** Update `test_v1_pairing.py`,
    `test_v1_spectate_live.py`, `test_v1_finalize.py`, and any handshake test expecting instant
    `game_start` (now: seek two bots / await fallback). Update CLAUDE.md build-status (V3 ✅), slices.md
    V3 row + breadboard, this plan's status → done; note the ADR-0022 scope in an ADR addendum. ruff
@@ -213,19 +226,18 @@ class SeekEnded(BaseModel):       # outbound
 Reconnect-resume (`welcome.active_game`) / `ply`-idempotency / heartbeat / illegal-move forfeit → V4 ·
 resign/draw/auto-draw / **real Elo rating updates + K-factor** → V5 (ADR-0011/A5) · dashboard / lobby /
 catch-up / replay / bot-management UI → V6 · packaged SDK / UCI → V7 · rate limits & griefing cooldowns
-(ADR-0019 H2/H3) → V-later · house-vs-house / 2nd house bot / never-empty-lobby-from-house → V6/V7 ·
-ambient pool-resident house bots (Kind 1) / 2nd house identity / house-vs-house / never-empty-lobby → V6 ·
-per-time-control ratings / Redis matcher → post-MVP scale-out.
+(ADR-0019 H2/H3) → V-later · ambient pool-resident house bots (Kind 1) / 2nd house identity /
+house-vs-house / never-empty-lobby → V6 · per-time-control ratings / Redis matcher → post-MVP scale-out.
 
-## Open items (flag, don't block)
-- **O-1 (D-i):** house presence is the load-bearing decision; the demo shape depends on it. Confirm the
-  per-pool fallback recommendation vs the always-seeking / strict-member alternatives.
-- **O-2 (D-g):** start-grace is realized as a launch-time liveness check, not a 10s readiness timer
-  (there is no "ready" message in PROTOCOL; both bots queue over live Sessions). Confirm this MVP reading
-  or ask for the full timer.
-- **O-3 (D-f):** anti-rematch "previous opponent" is recorded **at pairing** (not at FINISHED) for MVP
-  simplicity; refine in V5 when finalization state is shared.
-- **O-4 (ADR-0022):** with one house identity, house-vs-house / never-empty-lobby is deferred; record a
-  scope addendum on ADR-0022 when V3 lands.
-- **O-5:** existing V1/V2 tests assuming *synchronous* game_start-vs-house get updated in sub-step 6 —
-  the switch to async `game_start` (owner-noted) is a deliberate breaking change, covered by the migration.
+## Open items (resolved / carried)
+- **O-1 (D-i):** ✅ resolved — the two-house-role model (greeter now, ambient V6) was confirmed by the owner.
+- **O-2 (D-g):** ✅ realized as a **reap-before-pair** in `tick()` (a ticket whose live session vanished
+  is dropped before it can be paired; the survivor stays enrolled), not a launch-time abort or a 10s
+  readiness timer — there is no "ready" message in PROTOCOL and both bots queue over live Sessions.
+  A full readiness timer is deferred (V4 resilience, if ever needed).
+- **O-3 (D-f):** carried — anti-rematch "previous opponent" is recorded **at pairing** (not at FINISHED)
+  for MVP simplicity; refine in V5 when finalization state is shared with the matcher.
+- **O-4 (ADR-0022):** ✅ done — ADR-0022 gained a two-house-role addendum (greeter V3 / ambient V6).
+- **O-5:** ✅ done — the V1/V2 tests that assumed *synchronous* game_start-vs-house use the
+  `always_pair=True` escape hatch (game-loop/pairing) or a fast greeter (live SSE); the async
+  `game_start` switch is otherwise a deliberate, owner-noted change proven by the live matcher test.

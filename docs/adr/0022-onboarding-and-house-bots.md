@@ -34,3 +34,11 @@ A dedicated minimal **quickstart template repo** (a ready `RandomBot` + README) 
 - Positive: guaranteed, instant first game; a lively spectator experience from day one; example bots earn double duty as house bots.
 - Negative / costs: house bots are always-on processes to operate/monitor; their ratings occupy the leaderboard (acceptable / expected).
 - Follow-on questions opened: how many house bots and at what strength spread; should house-bot games be visually flagged as such in the lobby.
+
+## Addendum (2026-07-09, V3): two house roles; ambient role deferred to V6
+Building V3 (real matchmaking) split "house bot" into **two distinct roles**, and clarified when each lands:
+
+- **Kind 2 — ephemeral greeter (built in V3).** Guarantees a newcomer's near-instant first game (the *instant-first-game* guarantee above). It is **not** a pool member: the matcher **synthesizes a house opponent on demand** for a ticket that has waited alone past a short per-pool solo-wait (the greeter is enabled for 3+0, `ER_MM_*`-tunable). This preserves the sessionless in-process house of V1/V2 and never crowds real-vs-real pairing.
+- **Kind 1 — ambient pool-resident house bots (deferred to V6).** House bots that *sit in the pool* and are Elo-matched like users, **including against each other**, so the spectator lobby always shows a live game (the *never-empty-lobby-with-zero-users* guarantee above). This needs a **2nd house identity** (V3 ships only `bot_house_random`), tickets generalized to sessionless in-pool participants, and a re-enrollment lifecycle. Its payoff is the lobby — which is built in **V6** — so it lands there.
+
+Net: with a single house identity and greeter-only, **V3 does not produce house-vs-house games**; the *instant-first-game* guarantee is met in V3, the *never-empty-lobby* guarantee arrives in V6. See docs/shaping/V3-plan.md (D-i).

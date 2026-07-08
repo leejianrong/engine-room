@@ -10,7 +10,7 @@ where they disagree, and update the docs.
 |------|-------|
 | **V1 walking skeleton** | ✅ done — bot ↔ house `RandomBot`, server-authoritative clock, `python-chess` rules, live SSE spectating, SvelteKit board, Postgres finalization |
 | **V2 real identity** | ✅ done — GitHub OAuth (FastAPI-Users, stateless JWT/Bearer), bot CRUD (5/user cap), one rotatable per-bot API key (HMAC-hashed, shown once), real WS-handshake key auth + newest-wins, `games` bot FKs. REST at `/api/auth/github`, `/api/users`, `/api/bots`; backend `auth/` + `bots/` packages |
-| Elo matchmaking / pools / TTL / same-owner exclusion | ❌ V3 — V2 still always-pairs vs the house bot |
+| **V3 real matchmaking** | ✅ done — Elo widening-window pairing behind `MatchmakingQueue`, 3+0 **and** 5+0 pools, ≥2-to-pair, same-owner exclusion (house exempt), soft anti-rematch, seek TTL→`seek_ended{expired}` + `seek_cancel`, start-grace reap→no-show; **async** `game_start` via a background matcher loop; on-demand **greeter** house game (Kind-2, 3+0) for lone seekers. Ratings **read-only** (updates are V5). Single-process/in-memory |
 | Reconnect, `ply`-idempotency, heartbeat, illegal-move forfeit | ❌ V4 |
 | Resign / draw / auto-draw, real Elo updates | ❌ V5 — game_over rating is stubbed |
 | Dashboard + lobby + catch-up snapshot + replay | ❌ V6 — V1 view watches one game by `?game=<id>` |
