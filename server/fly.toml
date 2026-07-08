@@ -1,0 +1,43 @@
+# Fly.io config — engine-room backend (REST API + bot WebSocket).
+#
+# Single ALWAYS-ON machine on purpose: authoritative game state (board, clocks,
+# matchmaking queue, bot sockets) lives in memory in one process (ADR-0018/0020).
+# Do NOT autoscale or scale-to-zero — a second instance would hold separate games
+# and a bot could hit the wrong one; stopping the machine kills live games.
+# Horizontal scale is the ADR-0020 Redis-bridge, not yet built.
+#
+# Postgres is EXTERNAL (Neon) — set ER_DATABASE_URL via `fly secrets set` (see
+# docs/DEPLOY.md). Migrations run on container start via the Dockerfile CMD.
+#
+# Rename `app` to your Fly app and set `primary_region` to your nearest region
+# (`fly platform regions`). Deploy: `cd server && fly deploy` (or via CI, see
+# .github/workflows/deploy.yml).
+
+app = "engine-room"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8001          # matches the Dockerfile CMD (uvicorn --port 8001)
+  force_https = true
+  auto_stop_machines = false    # keep the single in-memory worker alive
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "30s"        # cover migrations + a cold Neon compute on boot
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
