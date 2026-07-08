@@ -22,12 +22,12 @@ class Settings(BaseSettings):
     # --- V2 identity (slice A2) ---
     # Human login sessions: FastAPI-Users stateless JWT (D-l). Signs the JWT and
     # the OAuth `state` param. MUST be overridden in production (ER_AUTH_SECRET).
-    auth_secret: str = "dev-auth-secret-change-me"
+    auth_secret: str = "dev-auth-secret-change-me-in-production-0123456789"  # ≥32B
     auth_jwt_lifetime_seconds: int = 60 * 60 * 24  # 1 day
 
     # Per-bot API keys: HMAC-SHA256 pepper (D-k / ADR-0014). MUST be overridden in
     # production (ER_API_KEY_PEPPER) — the pepper is what makes a DB leak useless.
-    api_key_pepper: str = "dev-api-key-pepper-change-me"
+    api_key_pepper: str = "dev-api-key-pepper-change-me-in-production-0123456789"
 
     # GitHub OAuth app (ADR-0013). Empty in dev/CI (tests stub the provider, D-i);
     # set the real values to run a live browser login.

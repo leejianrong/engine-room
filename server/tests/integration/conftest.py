@@ -26,7 +26,54 @@ async def session_factory(_postgres_url):
     engine = create_async_engine(async_url)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Truncate between tests so each starts from a clean slate (the container
+        # is session-scoped and reused; the engine/schema are per-test).
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
     try:
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:
         await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def app(session_factory):
+    """A create_app() whose request-scoped DB session is bound to the ephemeral
+    container (the REST/auth DI seam), mirroring how V1 injects the finalizer."""
+    from engine_room.app import create_app
+    from engine_room.persistence.db import get_async_session
+
+    application = create_app()
+
+    async def _override_session():
+        async with session_factory() as session:
+            yield session
+
+    application.dependency_overrides[get_async_session] = _override_session
+    return application
+
+
+@pytest_asyncio.fixture
+async def client(app):
+    """Async HTTP client over the in-process ASGI app. httpx (not the sync
+    TestClient) keeps requests on the same event loop as `session_factory`, so
+    asyncpg connections aren't used across loops. https base_url so the OAuth
+    CSRF cookie (Secure) is carried between requests."""
+    from httpx import ASGITransport, AsyncClient
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="https://testserver") as c:
+        yield c
+
+
+@pytest.fixture
+def as_user(app):
+    """Override `current_active_user` so a test acts as a given user without the
+    OAuth round-trip (D-i). Returns a setter; pass a User (or any object with
+    `.id`)."""
+    from engine_room.auth.deps import current_active_user
+
+    def _set(user):
+        app.dependency_overrides[current_active_user] = lambda: user
+
+    return _set

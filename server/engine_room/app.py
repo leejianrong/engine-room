@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .auth.deps import fastapi_users
+from .auth.oauth import make_github_oauth_router
 from .auth.schemas import UserRead, UserUpdate
 from .config import settings
 from .game.house_bots import RandomBot
@@ -55,8 +56,12 @@ def create_app(finalizer=None) -> FastAPI:
     app.include_router(bot_router)
     app.include_router(spectate_router)
 
-    # Human identity REST surface (V2 / slice A2). The GitHub OAuth router is
-    # mounted in sub-step 2; bot CRUD in sub-step 3.
+    # Human identity REST surface (V2 / slice A2). Bot CRUD mounts in sub-step 3.
+    app.include_router(
+        make_github_oauth_router(),
+        prefix="/api/auth/github",
+        tags=["auth"],
+    )
     app.include_router(
         fastapi_users.get_users_router(UserRead, UserUpdate),
         prefix="/api/users",
