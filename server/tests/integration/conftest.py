@@ -77,3 +77,25 @@ def as_user(app):
         app.dependency_overrides[current_active_user] = lambda: user
 
     return _set
+
+
+@pytest.fixture
+def make_user(session_factory):
+    """Insert a real User row (bots FK-reference it). Returns an async factory."""
+    from engine_room.persistence.models import User
+
+    async def _make(email: str = "dev@example.com"):
+        async with session_factory() as session:
+            user = User(
+                email=email,
+                hashed_password="not-used-oauth",
+                is_active=True,
+                is_superuser=False,
+                is_verified=True,
+            )
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            return user
+
+    return _make

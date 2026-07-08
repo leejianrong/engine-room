@@ -28,4 +28,4 @@ def test_migrations_apply_cleanly_on_fresh_db():
             engine.dispose()
 
     # V1 + V2 identity tables all present after a clean upgrade to head.
-    assert {"games", "user", "oauth_account"} <= tables
+    assert {"games", "user", "oauth_account", "bots"} <= tables

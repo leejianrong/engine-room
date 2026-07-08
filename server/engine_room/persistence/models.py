@@ -6,13 +6,15 @@ V1 minimal schema (V1-plan.md D-a). Forward-compatible:
 Alembic manages that growth.
 """
 
+import uuid
 from datetime import datetime
 
 from fastapi_users_db_sqlalchemy import (
     SQLAlchemyBaseOAuthAccountTableUUID,
     SQLAlchemyBaseUserTableUUID,
 )
-from sqlalchemy import DateTime, Integer, String, Text
+from fastapi_users_db_sqlalchemy.generics import GUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -37,6 +39,35 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", lazy="joined"
     )
+
+
+class Bot(Base):
+    """A user-owned (or house) bot — first-class, persistent identity (ADR-0009).
+
+    One rotatable API key per bot (ADR-0014), stored only as `key_hash` (D-k); the
+    plaintext is shown once at generation and never persisted. House bots have
+    `owner_id = NULL`, `is_house = True`, and no key (they run in-process).
+    """
+
+    __tablename__ = "bots"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)  # "bot_..."
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("user.id", ondelete="CASCADE"), nullable=True, index=True
+    )  # NULL = house bot
+    name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(256), default="")
+    rating: Mapped[int] = mapped_column(Integer, default=1200)  # US 8; moves in V5
+    is_house: Mapped[bool] = mapped_column(Boolean, default=False)
+    # API key (populated at key generation/rotation, sub-step 4)
+    key_hash: Mapped[str | None] = mapped_column(
+        String(128), unique=True, index=True, nullable=True
+    )
+    key_prefix: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    key_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class Game(Base):

@@ -11,6 +11,7 @@ from . import __version__
 from .auth.deps import fastapi_users
 from .auth.oauth import make_github_oauth_router
 from .auth.schemas import UserRead, UserUpdate
+from .bots.routes import router as bots_router
 from .config import settings
 from .game.house_bots import RandomBot
 from .game.registry import GameRegistry
@@ -67,6 +68,7 @@ def create_app(finalizer=None) -> FastAPI:
         prefix="/api/users",
         tags=["users"],
     )
+    app.include_router(bots_router)
     return app
 
 
