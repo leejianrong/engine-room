@@ -16,6 +16,7 @@ from .bots.routes import router as bots_router
 from .config import settings
 from .game.house_bots import RandomBot
 from .game.registry import GameRegistry
+from .matchmaking.launcher import GameLauncher
 from .matchmaking.queue import AlwaysPairQueue
 from .persistence.finalize import PostgresFinalizer
 from .pubsub.inproc import InProcPubSub
@@ -51,10 +52,13 @@ def create_app(finalizer=None, bot_authenticator=None) -> FastAPI:
     app.state.game_registry = GameRegistry()
     app.state.house_bot = RandomBot()
     app.state.pubsub = InProcPubSub()
+    app.state.finalizer = finalizer
+    # Turns a paired Game into a running game: game_start fan-out + run_game
+    # spawn (D-c). Shared by the always-pair path and the V3 matcher.
+    app.state.game_launcher = GameLauncher(app.state.pubsub, finalizer)
     app.state.matchmaking_queue = AlwaysPairQueue(
         app.state.game_registry, app.state.house_bot
     )
-    app.state.finalizer = finalizer
     app.state.bot_authenticator = bot_authenticator or NullAuthenticator()
     # One live session per bot; newest-wins replacement (ADR-0016 A6).
     app.state.session_registry = SessionRegistry()
