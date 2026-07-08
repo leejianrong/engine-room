@@ -8,12 +8,35 @@ Alembic manages that growth.
 
 from datetime import datetime
 
+from fastapi_users_db_sqlalchemy import (
+    SQLAlchemyBaseOAuthAccountTableUUID,
+    SQLAlchemyBaseUserTableUUID,
+)
 from sqlalchemy import DateTime, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+# --- V2 identity (slice A2) -----------------------------------------------------
+# User/OAuthAccount are FastAPI-Users' tables (ADR-0013). The mixins supply the
+# columns; combined with our Base they become the `user` / `oauth_account` tables.
+# The default table name `user` is a Postgres reserved word but SQLAlchemy quotes
+# identifiers, and the OAuth FK is hardcoded to `user.id`, so we keep the defaults.
+
+
+class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
+    pass
+
+
+class User(SQLAlchemyBaseUserTableUUID, Base):
+    # lazy="joined" so the SQLAlchemy adapter can resolve a user by OAuth account
+    # in one query (FastAPI-Users' documented pattern).
+    oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
+        "OAuthAccount", lazy="joined"
+    )
 
 
 class Game(Base):

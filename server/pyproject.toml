@@ -13,6 +13,8 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "chess>=1.11",
+    "fastapi-users[sqlalchemy]>=14",
+    "httpx-oauth>=0.15",
 ]
 
 [dependency-groups]
