@@ -1,15 +1,74 @@
 """Runtime settings. Environment variables are prefixed ER_ (e.g. ER_DATABASE_URL)."""
 
+import logging
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+
+logger = logging.getLogger(__name__)
+
+_ASYNC_PG_DRIVER = "postgresql+asyncpg"
+
+
+def _normalize_pg_url(raw: str) -> str:
+    """Coerce a Postgres URL to the async driver the app requires and translate
+    libpq-style SSL query params to what asyncpg understands.
+
+    The app is async-only (SQLAlchemy asyncpg). A bare ``postgresql://`` URL
+    resolves to the *sync* psycopg2 driver (not shipped in the image) — the
+    common footgun when pasting a Neon/Heroku connection string. This makes such
+    a URL just work, and warns so the operator can fix the source:
+
+    - ``postgresql://`` / ``postgres://`` / ``postgresql+psycopg2://`` → ``postgresql+asyncpg://``
+    - ``sslmode=require`` → ``ssl=require`` (asyncpg's spelling; used by Neon)
+    - drop ``channel_binding`` (asyncpg negotiates it itself and rejects the kwarg)
+
+    Non-Postgres URLs pass through untouched.
+    """
+    url = make_url(raw)
+    if not url.drivername.startswith("postgres"):
+        return raw
+
+    changed = False
+    if url.drivername != _ASYNC_PG_DRIVER:
+        logger.warning(
+            "ER_DATABASE_URL uses driver %r; coercing to %r — this app requires the "
+            "async driver. Set ER_DATABASE_URL to a %r URL to silence this.",
+            url.drivername,
+            _ASYNC_PG_DRIVER,
+            _ASYNC_PG_DRIVER,
+        )
+        url = url.set(drivername=_ASYNC_PG_DRIVER)
+        changed = True
+
+    query = dict(url.query)
+    sslmode = query.pop("sslmode", None)
+    if sslmode is not None:
+        query.setdefault("ssl", sslmode)  # keep an explicit ssl= if already present
+        changed = True
+    if query.pop("channel_binding", None) is not None:
+        changed = True
+
+    if changed:
+        return url.set(query=query).render_as_string(hide_password=False)
+    return raw
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ER_", env_file=".env", extra="ignore")
 
-    # Postgres (asyncpg driver). Matches docker-compose.yml defaults.
+    # Postgres (async asyncpg driver). Matches docker-compose.yml defaults.
+    # Normalized by `_normalize_pg_url` so a raw Neon/Heroku `postgresql://…` URL
+    # (sync driver, `sslmode`/`channel_binding` params) is coerced to work.
     database_url: str = (
         "postgresql+asyncpg://engine_room:engine_room@localhost:5433/engine_room"
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def _coerce_async_pg(cls, v: str) -> str:
+        return _normalize_pg_url(v)
 
     # --- V2 identity (slice A2) ---
     # (V1's stub `dev_bot_token` is gone — the WS handshake now authenticates real
