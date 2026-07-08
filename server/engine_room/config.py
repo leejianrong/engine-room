@@ -100,5 +100,26 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5174",
     ]
 
+    # --- V3 matchmaking (slice A3, ADR-0011/0012/0016 E8) ---
+    # Elo widening window: half-width starts at ±`mm_window_start`, grows by
+    # `mm_window_step` every `mm_window_step_seconds`, and is uncapped (∞ — pair
+    # anyone) once a ticket has waited `mm_window_uncap_seconds`. Read-only in V3
+    # (ratings on `bots.rating`); rating *writes* + K-factor are V5.
+    mm_window_start: int = 100
+    mm_window_step: int = 100
+    mm_window_step_seconds: float = 10.0
+    mm_window_uncap_seconds: float = 60.0
+    # Ticket max-wait: past this a lonely seek → seek_ended{expired} (E8, 120s).
+    mm_ticket_ttl_seconds: float = 120.0
+    # Matcher loop wake interval (also nudged by each seek/cancel). Small so
+    # widening/TTL fire promptly; tests set a tiny value.
+    mm_tick_interval_seconds: float = 0.5
+    # On-demand greeter house game (Kind 2, D-i): a ticket alone in a greeter pool
+    # for `mm_greeter_solo_wait_seconds` gets a house opponent (ADR-0022). Pools
+    # NOT listed here (e.g. 5+0 "300+0") never get a greeter → a lonely seek there
+    # expires, which is the V3 expiry demo. Keys are "<base>+<increment>" seconds.
+    mm_greeter_solo_wait_seconds: float = 3.0
+    mm_greeter_pools: list[str] = ["180+0"]
+
 
 settings = Settings()

@@ -43,6 +43,11 @@ class Seek(BaseModel):
     id: Optional[str] = None  # client correlation id, echoed on the ack
 
 
+class SeekCancel(BaseModel):
+    type: Literal["seek_cancel"]
+    seek_id: str
+
+
 class Move(BaseModel):
     type: Literal["move"]
     game_id: str
@@ -55,6 +60,7 @@ class Move(BaseModel):
 _CLIENT_MODELS: dict[str, type[BaseModel]] = {
     "hello": Hello,
     "seek": Seek,
+    "seek_cancel": SeekCancel,
     "move": Move,
 }
 
@@ -75,6 +81,12 @@ class SeekAck(BaseModel):
     seek_id: str
     status: str = "queued"
     id: Optional[str] = None  # echoes the client's seek correlation id
+
+
+class SeekEnded(BaseModel):
+    type: Literal["seek_ended"] = "seek_ended"
+    seek_id: str
+    reason: str  # "cancelled" | "expired" (TTL, ADR-0016 E8)
 
 
 class Clocks(BaseModel):
