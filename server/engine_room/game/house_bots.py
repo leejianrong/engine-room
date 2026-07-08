@@ -13,12 +13,21 @@ import chess
 
 from ..protocol.messages import BotInfo
 
+# Canonical identity of the built-in random house bot. Persisted as a `bots` row
+# (owner NULL, is_house) so games' bot FKs resolve for house games (ADR-0022).
+HOUSE_RANDOM_ID = "bot_house_random"
+HOUSE_RANDOM_NAME = "house-random"
+HOUSE_RANDOM_RATING = 1200
+
 
 class RandomBot:
     """Picks a uniformly-random legal move."""
 
     def __init__(
-        self, id: str = "bot_house_random", name: str = "house-random", rating: int = 1200
+        self,
+        id: str = HOUSE_RANDOM_ID,
+        name: str = HOUSE_RANDOM_NAME,
+        rating: int = HOUSE_RANDOM_RATING,
     ):
         self.info = BotInfo(id=id, name=name, rating=rating)
 

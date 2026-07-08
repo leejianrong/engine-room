@@ -1,8 +1,8 @@
-"""identity: user + oauth_account + bots (V2 / slice A2)
+"""identity: user + oauth_account + bots + games bot FKs (V2 / slice A2)
 
-Adds the FastAPI-Users human-identity tables (ADR-0013) and the user-owned Bot
-table (ADR-0009/0014). The games bot-FK columns + house-bot seed are added by a
-later revision in this slice (sub-step 6).
+Adds the FastAPI-Users human-identity tables (ADR-0013), the user-owned Bot table
+(ADR-0009/0014), the `games` bot-FK columns (ADR-0009), and seeds the built-in
+house bot so those FKs resolve for house games (ADR-0022).
 
 Revision ID: 0002
 Revises: 0001
@@ -75,8 +75,31 @@ def upgrade() -> None:
     op.create_index(op.f("ix_bots_owner_id"), "bots", ["owner_id"])
     op.create_index(op.f("ix_bots_key_hash"), "bots", ["key_hash"], unique=True)
 
+    # Seed the built-in random house bot (owner NULL, is_house) so house games'
+    # FKs resolve. Values mirror engine_room.game.house_bots.HOUSE_RANDOM_*.
+    op.execute(
+        "INSERT INTO bots (id, name, description, rating, is_house, created_at) "
+        "VALUES ('bot_house_random', 'house-random', "
+        "'Built-in random-move house bot.', 1200, true, now())"
+    )
+
+    # games gains real bot FKs (ADR-0009); nullable + SET NULL so bot deletion
+    # (US 9) doesn't erase history. The V1 *_name snapshot columns are kept (D-f).
+    op.add_column("games", sa.Column("white_bot_id", sa.String(length=40), nullable=True))
+    op.add_column("games", sa.Column("black_bot_id", sa.String(length=40), nullable=True))
+    op.create_foreign_key(
+        "fk_games_white_bot", "games", "bots", ["white_bot_id"], ["id"], ondelete="SET NULL"
+    )
+    op.create_foreign_key(
+        "fk_games_black_bot", "games", "bots", ["black_bot_id"], ["id"], ondelete="SET NULL"
+    )
+
 
 def downgrade() -> None:
+    op.drop_constraint("fk_games_black_bot", "games", type_="foreignkey")
+    op.drop_constraint("fk_games_white_bot", "games", type_="foreignkey")
+    op.drop_column("games", "black_bot_id")
+    op.drop_column("games", "white_bot_id")
     op.drop_index(op.f("ix_bots_key_hash"), table_name="bots")
     op.drop_index(op.f("ix_bots_owner_id"), table_name="bots")
     op.drop_table("bots")

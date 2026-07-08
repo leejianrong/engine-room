@@ -80,7 +80,16 @@ class Game(Base):
     pgn: Mapped[str] = mapped_column(Text)  # python-chess rendered
     base_seconds: Mapped[int] = mapped_column(Integer)  # 180 for 3+0
     increment_seconds: Mapped[int] = mapped_column(Integer)  # 0 at MVP
-    white_name: Mapped[str] = mapped_column(String(64))  # V1: stub/house names; V2 -> FK
+    # V2: FKs to the real bots (ADR-0009). Nullable + ON DELETE SET NULL so a
+    # user can delete a bot (US 9) without erasing its game history; the *_name
+    # columns are kept as a denormalized snapshot that survives deletion (D-f).
+    white_bot_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey("bots.id", ondelete="SET NULL"), nullable=True
+    )
+    black_bot_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey("bots.id", ondelete="SET NULL"), nullable=True
+    )
+    white_name: Mapped[str] = mapped_column(String(64))  # snapshot at game time
     black_name: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

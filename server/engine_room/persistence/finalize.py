@@ -34,7 +34,9 @@ class PostgresFinalizer:
                         pgn=pgn,
                         base_seconds=game.time_control.base_seconds,
                         increment_seconds=game.time_control.increment_seconds,
-                        white_name=game.white.bot.name,
+                        white_bot_id=game.white.bot.id,  # V2 FKs (ADR-0009)
+                        black_bot_id=game.black.bot.id,
+                        white_name=game.white.bot.name,  # denormalized snapshot
                         black_name=game.black.bot.name,
                         created_at=game.created_at,
                         finished_at=datetime.now(timezone.utc),

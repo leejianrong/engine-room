@@ -23,9 +23,18 @@ def test_migrations_apply_cleanly_on_fresh_db():
 
         engine = create_engine(sync_url)
         try:
-            tables = set(inspect(engine).get_table_names())
+            insp = inspect(engine)
+            tables = set(insp.get_table_names())
+            games_cols = {c["name"] for c in insp.get_columns("games")}
+            with engine.connect() as conn:
+                house = conn.exec_driver_sql(
+                    "SELECT id, is_house FROM bots WHERE id = 'bot_house_random'"
+                ).first()
         finally:
             engine.dispose()
 
     # V1 + V2 identity tables all present after a clean upgrade to head.
     assert {"games", "user", "oauth_account", "bots"} <= tables
+    # games gained the bot FKs (D-f) and the house bot is seeded (ADR-0022).
+    assert {"white_bot_id", "black_bot_id"} <= games_cols
+    assert house is not None and house[1] is True
