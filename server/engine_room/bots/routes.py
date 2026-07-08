@@ -5,7 +5,7 @@ on that user's own bots (US 5–9). Key generation/rotation routes are added in
 sub-step 4.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth.deps import current_active_user
@@ -41,6 +41,7 @@ async def create_bot(
 @router.post("/{bot_id}/rotate-key", response_model=BotWithKey)
 async def rotate_key(
     bot_id: str,
+    request: Request,
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> BotWithKey:
@@ -48,7 +49,14 @@ async def rotate_key(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="bot not found")
     bot, plaintext = result
-    return _with_key(bot, plaintext)  # old key is now invalid (ADR-0014)
+
+    # ADR-0014: rotation invalidates the old key instantly — terminate any live
+    # session still holding it (single-process MVP: same event loop as the WS).
+    evicted = request.app.state.session_registry.evict(bot_id)
+    if evicted is not None:
+        await evicted.terminate("api key rotated")
+
+    return _with_key(bot, plaintext)  # old key is now invalid
 
 
 @router.get("", response_model=list[BotRead])

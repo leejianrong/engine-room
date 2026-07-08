@@ -25,6 +25,15 @@ class BotAuthenticator(Protocol):
         ...
 
 
+class NullAuthenticator:
+    """Rejects every key. The safe default when `create_app` is called without an
+    authenticator (no accidental auth bypass); production injects the Postgres one
+    and WS tests inject an in-memory fake."""
+
+    async def authenticate(self, bearer_key: str) -> BotInfo | None:
+        return None
+
+
 class PostgresBotAuthenticator:
     def __init__(self, session_factory=SessionLocal) -> None:
         self._session_factory = session_factory

@@ -11,6 +11,7 @@ from . import __version__
 from .auth.deps import fastapi_users
 from .auth.oauth import make_github_oauth_router
 from .auth.schemas import UserRead, UserUpdate
+from .bots.authenticator import NullAuthenticator, PostgresBotAuthenticator
 from .bots.routes import router as bots_router
 from .config import settings
 from .game.house_bots import RandomBot
@@ -20,14 +21,19 @@ from .persistence.finalize import PostgresFinalizer
 from .pubsub.inproc import InProcPubSub
 from .spectate.sse import router as spectate_router
 from .ws.bot_endpoint import router as bot_router
+from .ws.session_registry import SessionRegistry
 
 
-def create_app(finalizer=None) -> FastAPI:
+def create_app(finalizer=None, bot_authenticator=None) -> FastAPI:
     """Application factory.
 
     `finalizer` is the game-finalization hook (dependency-injected). Left None
-    (the factory default) games are not persisted — handy for fast tests. The
-    production entrypoint below wires a PostgresFinalizer.
+    (the factory default) games are not persisted — handy for fast tests.
+
+    `bot_authenticator` resolves a WS handshake's API key to a Bot identity
+    (ADR-0014). Left None it defaults to a NullAuthenticator (rejects all — no
+    accidental auth bypass); the production entrypoint wires PostgresBotAuthenticator
+    and WS-seam tests inject an in-memory fake.
     """
     app = FastAPI(title="Engine Room", version=__version__)
 
@@ -49,6 +55,9 @@ def create_app(finalizer=None) -> FastAPI:
         app.state.game_registry, app.state.house_bot
     )
     app.state.finalizer = finalizer
+    app.state.bot_authenticator = bot_authenticator or NullAuthenticator()
+    # One live session per bot; newest-wins replacement (ADR-0016 A6).
+    app.state.session_registry = SessionRegistry()
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -72,5 +81,9 @@ def create_app(finalizer=None) -> FastAPI:
     return app
 
 
-# Production wiring: persist finished games to Postgres.
-app = create_app(finalizer=PostgresFinalizer())
+# Production wiring: persist finished games to Postgres; authenticate real
+# per-bot API keys at the WS handshake.
+app = create_app(
+    finalizer=PostgresFinalizer(),
+    bot_authenticator=PostgresBotAuthenticator(),
+)

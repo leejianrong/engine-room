@@ -16,9 +16,33 @@ import chess
 from starlette.testclient import TestClient
 
 from engine_room.app import create_app
+from engine_room.protocol.messages import BotInfo
 
 BOT_WS_PATH = "/api/bot/v1"
-DEFAULT_TOKEN = "dev-token"
+# A real-format key (ADR-0014 crbk_ prefix); the fake authenticator maps it to a
+# bot identity. V1's stub dev-token is gone (V2 authenticates real keys).
+DEFAULT_TOKEN = "crbk_faketoken000000000000000000000000000000"
+DEFAULT_BOT = BotInfo(id="bot_dev", name="dev-bot", rating=1200)
+
+
+class FakeBotAuthenticator:
+    """In-memory API-key → BotInfo map — the WS-seam test double (D-c). Unknown
+    or empty keys authenticate to None (→ UNAUTHORIZED), like the real one."""
+
+    def __init__(self, mapping: dict[str, BotInfo] | None = None) -> None:
+        self._map = dict(mapping or {})
+
+    def add(self, token: str, bot: BotInfo) -> "FakeBotAuthenticator":
+        self._map[token] = bot
+        return self
+
+    async def authenticate(self, bearer_key: str) -> BotInfo | None:
+        return self._map.get(bearer_key)
+
+
+def default_authenticator() -> FakeBotAuthenticator:
+    """A fake authenticator that accepts DEFAULT_TOKEN as DEFAULT_BOT."""
+    return FakeBotAuthenticator({DEFAULT_TOKEN: DEFAULT_BOT})
 
 
 class FakeBot:
@@ -86,9 +110,18 @@ class FakeBot:
 
 
 @contextmanager
-def connect(token: str | None = DEFAULT_TOKEN, app=None) -> Iterator[FakeBot]:
-    """Open an authenticated bot WebSocket. Pass token=None to omit the header."""
-    client = TestClient(app or create_app())
+def connect(
+    token: str | None = DEFAULT_TOKEN, app=None, authenticator=None
+) -> Iterator[FakeBot]:
+    """Open an authenticated bot WebSocket. Pass token=None to omit the header.
+
+    Builds an app with a FakeBotAuthenticator (accepting DEFAULT_TOKEN) unless an
+    `app` or `authenticator` is supplied — so existing single-bot tests keep
+    working while newest-wins/multi-bot tests can inject their own identities.
+    """
+    if app is None:
+        app = create_app(bot_authenticator=authenticator or default_authenticator())
+    client = TestClient(app)
     headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
     with client.websocket_connect(BOT_WS_PATH, headers=headers) as ws:
         yield FakeBot(ws)
