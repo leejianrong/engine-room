@@ -7,7 +7,7 @@ OAuth round-trip. Needs Docker.
 from engine_room.bots import MAX_BOTS_PER_USER
 
 
-async def test_create_returns_bot_without_key(client, make_user, as_user):
+async def test_create_returns_bot_with_key_once(client, make_user, as_user):
     as_user(await make_user())
     r = await client.post("/api/bots", json={"name": "my-bot", "description": "hi"})
     assert r.status_code == 201, r.text
@@ -15,8 +15,13 @@ async def test_create_returns_bot_without_key(client, make_user, as_user):
     assert body["name"] == "my-bot"
     assert body["description"] == "hi"
     assert body["rating"] == 1200  # US 8 default (moves in V5)
-    assert body["key_prefix"] is None  # key not generated yet (sub-step 4)
-    assert "api_key" not in body  # never leaked on read
+    assert body["api_key"].startswith("crbk_")  # shown once at creation (US 11)
+    assert body["key_prefix"] and body["key_prefix"] in body["api_key"]
+
+    # A subsequent GET never returns the plaintext key (US 14).
+    got = (await client.get(f"/api/bots/{body['id']}")).json()
+    assert "api_key" not in got
+    assert got["key_prefix"] == body["key_prefix"]
 
 
 async def test_list_and_get_are_owner_scoped(client, make_user, as_user):

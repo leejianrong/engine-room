@@ -12,25 +12,43 @@ from ..auth.deps import current_active_user
 from ..persistence.db import get_async_session
 from ..persistence.models import User
 from . import service
-from .schemas import BotCreate, BotRead
+from .schemas import BotCreate, BotRead, BotWithKey
 
 router = APIRouter(prefix="/api/bots", tags=["bots"])
 
 
-@router.post("", response_model=BotRead, status_code=status.HTTP_201_CREATED)
+def _with_key(bot, plaintext: str) -> BotWithKey:
+    """Build the shown-once response (BotRead fields + the plaintext key)."""
+    return BotWithKey(**BotRead.model_validate(bot).model_dump(), api_key=plaintext)
+
+
+@router.post("", response_model=BotWithKey, status_code=status.HTTP_201_CREATED)
 async def create_bot(
     data: BotCreate,
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
-) -> BotRead:
+) -> BotWithKey:
     try:
-        bot = await service.create_bot(session, user.id, data)
+        bot, plaintext = await service.create_bot(session, user.id, data)
     except service.BotCapReached:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"bot limit reached ({service.MAX_BOTS_PER_USER} per user)",
         )
-    return BotRead.model_validate(bot)
+    return _with_key(bot, plaintext)  # the key is shown exactly once (US 11)
+
+
+@router.post("/{bot_id}/rotate-key", response_model=BotWithKey)
+async def rotate_key(
+    bot_id: str,
+    user: User = Depends(current_active_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> BotWithKey:
+    result = await service.rotate_key(session, user.id, bot_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="bot not found")
+    bot, plaintext = result
+    return _with_key(bot, plaintext)  # old key is now invalid (ADR-0014)
 
 
 @router.get("", response_model=list[BotRead])
