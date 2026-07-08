@@ -17,6 +17,7 @@ from ..protocol.messages import (
     ProtocolError,
     Seek,
     SeekAck,
+    SeekCancel,
     Welcome,
     parse_client_message,
 )
@@ -122,6 +123,9 @@ async def bot_ws(websocket: WebSocket) -> None:
                 # launch we drive here (kept working until sub-step 4 swaps it).
                 if result.game is not None:
                     await websocket.app.state.game_launcher.launch(result.game)
+            elif isinstance(msg, SeekCancel):
+                # Withdraw a waiting seek (ADR-0016 E8); matcher → seek_ended.
+                await queue.cancel(msg.seek_id)
             elif isinstance(msg, Move):
                 # Single socket reader: hand in-game moves to the game loop.
                 await session.inbound.put(msg)

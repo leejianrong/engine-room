@@ -16,7 +16,7 @@ _NATURAL_TERMINATIONS = {
 
 
 def test_full_random_game_reaches_terminal():
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         bot.seek()
         bot.expect("game_start")
@@ -31,7 +31,7 @@ def test_full_random_game_reaches_terminal():
 
 
 def test_first_your_turn_is_white_ply_zero():
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         bot.seek()
         gs = bot.expect("game_start")
@@ -45,7 +45,7 @@ def test_first_your_turn_is_white_ply_zero():
 
 
 def test_move_ack_echoes_correlation_id():
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         bot.seek()
         bot.expect("game_start")
@@ -62,7 +62,7 @@ def test_move_ack_echoes_correlation_id():
 
 def test_flag_on_time_loses():
     # 1s clock; the bot never answers your_turn, so White flags on time.
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         bot.seek(base_seconds=1)
         bot.expect("game_start")
@@ -73,7 +73,7 @@ def test_flag_on_time_loses():
 
 
 def test_your_turn_carries_opponents_last_move():
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         bot.seek()
         bot.expect("game_start")
@@ -94,7 +94,7 @@ def test_your_turn_carries_opponents_last_move():
 
 
 def test_invalid_ply_is_reported_then_move_accepted():
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         bot.seek()
         bot.expect("game_start")

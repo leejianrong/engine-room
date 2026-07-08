@@ -27,7 +27,12 @@ class _Server(uvicorn.Server):
 
 @contextlib.asynccontextmanager
 async def live_server():
-    app = create_app(bot_authenticator=default_authenticator())
+    # A lone seek is greeted with a house game immediately (V3 greeter, H=0) so
+    # this single-bot spectating test stays fast and deterministic.
+    app = create_app(
+        bot_authenticator=default_authenticator(),
+        matcher_kwargs={"greeter_solo_wait_seconds": 0.0, "tick_interval_seconds": 0.02},
+    )
     config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
     server = _Server(config)
     thread = threading.Thread(target=server.run, daemon=True)

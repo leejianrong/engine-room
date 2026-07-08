@@ -7,7 +7,7 @@ from engine_room.protocol.messages import BotInfo
 
 
 def test_seek_pairs_with_house_bot():
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         ack = bot.seek(base_seconds=180)
         assert ack["type"] == "seek_ack"
@@ -24,7 +24,7 @@ def test_seek_pairs_with_house_bot():
 
 
 def test_five_plus_zero_pool_clocks():
-    with connect() as bot:
+    with connect(always_pair=True) as bot:
         bot.hello()
         bot.seek(base_seconds=300)
         gs = bot.expect("game_start")
@@ -41,7 +41,7 @@ def test_each_seek_gets_a_distinct_game():
             "crbk_bbbb": BotInfo(id="bot_b", name="b", rating=1200),
         }
     )
-    app = create_app(bot_authenticator=authn)
+    app = create_app(bot_authenticator=authn, always_pair=True)
     with connect(app=app, token="crbk_aaaa") as bot1:
         bot1.hello()
         bot1.seek()
