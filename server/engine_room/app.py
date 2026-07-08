@@ -5,8 +5,10 @@ game engine mount here in later sub-steps.
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
+from .config import settings
 from .game.house_bots import RandomBot
 from .game.registry import GameRegistry
 from .matchmaking.queue import AlwaysPairQueue
@@ -24,6 +26,15 @@ def create_app(finalizer=None) -> FastAPI:
     production entrypoint below wires a PostgresFinalizer.
     """
     app = FastAPI(title="Engine Room", version=__version__)
+
+    # Allow the SvelteKit dev server (and configured origins) to call the API,
+    # e.g. the spectator EventSource. SSE GETs are simple requests (no preflight).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allow_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # Single-process MVP state (ADR-0020); matchmaking + pubsub sit behind their
     # interfaces (R6) so Redis-backed impls swap in at scale-out.
