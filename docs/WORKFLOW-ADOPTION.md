@@ -1,7 +1,9 @@
 # Workflow adoption — status
 
 Tracks how much of [DEVELOPER-WORKFLOWS.md](DEVELOPER-WORKFLOWS.md) (the portable playbook)
-engine-room has adopted. **Phases A–C are done; Phase D is deferred.**
+engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2.**
+Server-enforced branch protection is intentionally skipped (private repo — see divergences);
+Playwright + deploy still deferred.
 
 ## Adopted (Phases A–C, 2026-07-08)
 
@@ -14,15 +16,21 @@ engine-room has adopted. **Phases A–C are done; Phase D is deferred.**
 | **Pre-push hook** (§3) | `scripts/git-hooks/pre-push` runs `ruff` + `pytest tests/unit` + `npm run check`. Install once: `ln -sf ../../scripts/git-hooks/pre-push .git/hooks/pre-push`. |
 | **CI** (§4) | `.github/workflows/ci.yml` — parallel `lint` / `unit` / `integration` / `frontend` jobs on every PR + push to `main`; `uv run --frozen`, `npm ci`, dep caching. |
 
-Test counts today: **27 unit + 2 integration = 29**, ruff clean.
+Test counts today: **41 unit + 17 integration = 58**, ruff clean (V2).
+
+## Adopted at V2 (Phase D — branch/PR flow)
+
+| Playbook item | Here |
+|---------------|------|
+| **Branch-per-slice + PR-only merges** (§6) | V2 built on `feat/v2-identity`, small per-sub-step commits, opened as **PR #1**; CI gates the merge. This is the standing convention from V2 on (CLAUDE.md "Workflow conventions"). |
 
 ## Deferred to Phase D
 
 | Item | Why not yet | Trigger to do it |
 |------|-------------|------------------|
-| **Playwright browser e2e** (§1b) | Heaviest item; the live-server SSE test already covers the data path end-to-end. The gap is pixel-level DOM rendering. | After V2, or when a UI regression needs guarding. |
-| **Branch-per-slice + PR-only + protected `main`** (§6) | V1 was bootstrapped with small commits straight to `main`. | Adopt starting **V2** — `feat/v2-identity` branch, PR, CI-green-to-merge, branch-protection rule. |
-| **Deploy gated on CI** (§5) | Hosting target is undecided — **QUESTIONS.md K3** is still open. The playbook deploys to Fly.io; we haven't chosen. | When K3 is decided. |
+| **Real migrations in the integration fixture** (§1a) | The `session_factory` fixture builds the schema with `create_all`, not the Alembic chain; `0002`'s SQL is validated separately by `test_v2_migrations` on a fresh container. **Revisit: switch the fixture to `alembic upgrade head`** so every integration test also exercises the migrations (and drift can't hide). | Do it when convenient (good early-V3 chore); the env.py `sqlalchemy.url` hook already added for the migration test makes this straightforward. |
+| **Playwright browser e2e** (§1b) | Heaviest item; the live-server SSE test already covers the data path end-to-end. The gap is pixel-level DOM rendering. | When a UI regression needs guarding (V6 dashboard). |
+| **Deploy gated on CI** (§5) | Hosting target undecided — **QUESTIONS.md K3** still open. The playbook deploys to Fly.io. | When K3 is decided. |
 
 ## Deliberate divergences from the playbook
 
@@ -31,6 +39,10 @@ Test counts today: **27 unit + 2 integration = 29**, ruff clean.
   cross-origin. Revisit at deploy time when the production topology (reverse proxy vs. separate
   origins) is known.
 - **Ports** moved off defaults: backend **:8001**, frontend **:5174**, Postgres **:5433**.
-- **`create_all` (not alembic) in the integration fixture.** Simpler given the config singleton;
-  a future refinement is running real migrations in the fixture (also exercises the migrations),
-  as the playbook's §1a does.
+- **`create_all` (not alembic) in the integration fixture.** Simpler given the config singleton.
+  Tracked as a Phase-D revisit above (switch to real migrations); `test_v2_migrations` covers the
+  Alembic chain on a fresh container in the meantime.
+- **No server-enforced branch protection on `main`** — the repo is deliberately **private** and
+  GitHub gates branch-protection rules behind Pro/public (403). The branch-per-slice + PR-only +
+  CI-green flow is followed **by convention** (CLAUDE.md "Workflow conventions"); not revisiting
+  unless the repo goes public.

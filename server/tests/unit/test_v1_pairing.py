@@ -1,8 +1,9 @@
 """V1 sub-step 3 checkpoint: a seek pairs the bot with a house bot (game_start)."""
 
-from support.fake_client import connect
+from support.fake_client import FakeBotAuthenticator, connect
 
 from engine_room.app import create_app
+from engine_room.protocol.messages import BotInfo
 
 
 def test_seek_pairs_with_house_bot():
@@ -32,13 +33,20 @@ def test_five_plus_zero_pool_clocks():
 
 
 def test_each_seek_gets_a_distinct_game():
-    # Two independent bots on the same server each get their own game vs house.
-    app = create_app()
-    with connect(app=app) as bot1:
+    # Two *different* bots on the same server each get their own game vs house.
+    # (Distinct identities, so newest-wins doesn't evict the first — ADR-0016 A6.)
+    authn = FakeBotAuthenticator(
+        {
+            "crbk_aaaa": BotInfo(id="bot_a", name="a", rating=1200),
+            "crbk_bbbb": BotInfo(id="bot_b", name="b", rating=1200),
+        }
+    )
+    app = create_app(bot_authenticator=authn)
+    with connect(app=app, token="crbk_aaaa") as bot1:
         bot1.hello()
         bot1.seek()
         g1 = bot1.expect("game_start")
-        with connect(app=app) as bot2:
+        with connect(app=app, token="crbk_bbbb") as bot2:
             bot2.hello()
             bot2.seek()
             g2 = bot2.expect("game_start")

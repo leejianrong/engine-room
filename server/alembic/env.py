@@ -16,9 +16,16 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _db_url() -> str:
+    """Prefer an explicit `sqlalchemy.url` on the Alembic config (used by the
+    migration integration test to point at an ephemeral container), else fall
+    back to the app settings."""
+    return config.get_main_option("sqlalchemy.url") or settings.database_url
+
+
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=_db_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -34,7 +41,7 @@ def _do_run_migrations(connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    connectable = create_async_engine(settings.database_url)
+    connectable = create_async_engine(_db_url())
     async with connectable.connect() as connection:
         await connection.run_sync(_do_run_migrations)
     await connectable.dispose()

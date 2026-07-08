@@ -18,7 +18,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 | Slice | From part | Goal (the demo) | Thickens |
 |-------|-----------|-----------------|----------|
 | **V1** ✅ | A1 | Stub-auth bot ↔ house `RandomBot` plays a full real 3+0 game under the server clock; moves stream live to a SvelteKit page; result+PGN in Postgres | — (skeleton) |
-| **V2** | A2 | Sign in with GitHub, create a bot, get a key once; the **real key** authenticates the WS handshake (stub-auth removed) | N1 auth; +REST bot-CRUD; newest-wins |
+| **V2** ✅ | A2 | Sign in with GitHub, create a bot, get a key once; the **real key** authenticates the WS handshake (stub-auth removed) | N1 auth; +REST bot-CRUD; newest-wins |
 | **V3** | A3 | Two real user bots get matched by Elo in a 3+0 pool; same-owner bots never paired; a lonely seek expires | N3 matcher → pools |
 | **V4** | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
 | **V5** | A5 | Bots resign and agree draws; server auto-draws stalemate/insufficient/repetition; ratings move on FINISHED | N5/N8 outcomes |
@@ -67,6 +67,17 @@ Driven by an in-process fake protocol client (not the SDK):
 
 ---
 
-## V2–V7 — defined, breadboard deferred
+## V2 — Real identity
+
+**Status:** ✅ **complete** (2026-07-08). Built in 6 sub-steps (the frontend sub-step dropped —
+V2 ships the REST + OAuth backend only, UI stays in V6); see [V2-plan.md](V2-plan.md). Thickens
+N1 (handshake auth): stub dev-token → GitHub OAuth (FastAPI-Users, stateless JWT/Bearer) + real
+per-bot API keys (`crbk_`, HMAC-SHA256-hashed, shown once, rotatable). Adds the human/management
+REST surface (`/api/auth/github`, `/api/users`, `/api/bots`) with a 5-bots/user cap, newest-wins
+session replacement (ADR-0016 A6), rotation-terminates-live-session (ADR-0014), and `games`
+`white_bot_id`/`black_bot_id` FKs (Alembic `0002`, house bot seeded). 41 unit + 17 integration
+tests pass. Matchmaking is still always-pair vs house (V3).
+
+## V3–V7 — defined, breadboard deferred
 
 Each is a real vertical slice ending in a demo (see slice map). Full affordance breadboards are produced in this doc when the slice is picked up, and its `V<n>-plan.md` follows. Coarse thickening targets are in [shaping.md → A2–A7](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc).

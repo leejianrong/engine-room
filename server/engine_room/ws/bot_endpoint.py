@@ -1,20 +1,20 @@
 """The bot WebSocket endpoint — PROTOCOL.md §3-5 (handshake + seek).
 
-V1 sub-step 2 scope: stub-auth (dev token), `hello`->`welcome`, protocol-version
-check, and `seek`->`seek_ack` (enqueue only). Pairing, the game loop, and
-reconnect arrive in later sub-steps.
+Handshake authenticates the bot's real API key (ADR-0014; injected
+`BotAuthenticator`), binds the Session to the real Bot identity, and enforces
+newest-wins session replacement (ADR-0016 A6). `hello`->`welcome`,
+protocol-version check, and `seek`->`seek_ack`/pairing follow. Reconnect-resume
+of a mid-game seat is V4.
 """
 
 import asyncio
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from ..config import settings
 from ..game.game import Game
 from ..game.worker import run_game
 from ..ids import new_id
 from ..protocol.messages import (
-    BotInfo,
     Clocks,
     Error,
     GameStart,
@@ -55,19 +55,17 @@ def _bearer_token(websocket: WebSocket) -> str | None:
 async def bot_ws(websocket: WebSocket) -> None:
     await websocket.accept()
 
-    # --- auth (stub: single dev token; real hashed keys in V2, ADR-0014) ---
-    if _bearer_token(websocket) != settings.dev_bot_token:
+    # --- auth: real per-bot API key (ADR-0014), injected authenticator (D-c) ---
+    bot_info = await websocket.app.state.bot_authenticator.authenticate(
+        _bearer_token(websocket) or ""
+    )
+    if bot_info is None:
         unauthorized = Error(code="UNAUTHORIZED", message="bad or missing API key", fatal=True)
         await websocket.send_text(unauthorized.model_dump_json())
         await websocket.close(_CLOSE_POLICY_VIOLATION)
         return
 
-    # V1: one logical stub bot behind the dev token; real identity comes in V2.
-    session = Session(
-        websocket,
-        bot=BotInfo(id="bot_dev", name="dev-bot", rating=1200),
-        session_id=new_id("sess"),
-    )
+    session = Session(websocket, bot=bot_info, session_id=new_id("sess"))
 
     # --- handshake: first frame must be hello ---
     try:
@@ -105,6 +103,13 @@ async def bot_ws(websocket: WebSocket) -> None:
             active_game=None,
         )
     )
+
+    # --- newest-wins: this becomes the bot's live session; close the prior one
+    # (ADR-0016 A6). Best-effort — the old socket may already be half-dead. ---
+    registry = websocket.app.state.session_registry
+    replaced = registry.register(session)
+    if replaced is not None:
+        await replaced.terminate("replaced by a newer connection")
 
     # --- main receive loop ---
     queue = websocket.app.state.matchmaking_queue
@@ -144,8 +149,11 @@ async def bot_ws(websocket: WebSocket) -> None:
                     Error(code="INVALID_MESSAGE", message="unhandled type", fatal=False)
                 )
     except WebSocketDisconnect:
-        # Reconnect / seat cleanup on disconnect arrives in V4 (resilience).
-        return
+        # Reconnect / mid-game seat cleanup arrives in V4 (resilience).
+        pass
+    finally:
+        # Drop this session unless a newer one already replaced it (newest-wins).
+        registry.remove_if_current(session)
 
 
 def _game_start_for(game: Game, session: Session) -> GameStart:

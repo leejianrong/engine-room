@@ -15,6 +15,7 @@ import chess
 import httpx
 import uvicorn
 import websockets
+from support.fake_client import DEFAULT_TOKEN, default_authenticator
 
 from engine_room.app import create_app
 
@@ -26,7 +27,8 @@ class _Server(uvicorn.Server):
 
 @contextlib.asynccontextmanager
 async def live_server():
-    config = uvicorn.Config(create_app(), host="127.0.0.1", port=0, log_level="warning")
+    app = create_app(bot_authenticator=default_authenticator())
+    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
     server = _Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -44,7 +46,7 @@ async def test_sse_streams_a_live_game():
     async with live_server() as hostport:
         async with websockets.connect(
             f"ws://{hostport}/api/bot/v1",
-            additional_headers={"Authorization": "Bearer dev-token"},
+            additional_headers={"Authorization": f"Bearer {DEFAULT_TOKEN}"},
         ) as ws:
             await ws.send(json.dumps({"type": "hello", "protocol_version": "1.0"}))
             await ws.recv()  # welcome

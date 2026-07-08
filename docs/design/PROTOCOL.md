@@ -24,7 +24,8 @@ ADR-0021 (versioning), ADR-0025 (seek-over-WS, clock-is-arbiter). Resolves QUEST
 
 ## 3. Authentication (ADR-0014)
 - The bot's **API key** is sent in the `Authorization: Bearer <key>` **header on the WebSocket upgrade request** — never in the query string, never per-message.
-- One live session per bot; a new authenticated connection **replaces** any prior live one (newest-wins, ADR-0016 A6).
+- One live session per bot; a new authenticated connection **replaces** any prior live one (newest-wins, ADR-0016 A6) — the superseded socket receives `error {code:"SESSION_REPLACED"}` and is closed. Key **rotation** likewise terminates the live session (ADR-0014).
+- Implemented in V2: the key is `crbk_<random>`, stored server-side only as `HMAC-SHA256(pepper, key)` and shown once at generation/rotation (ADR-0014).
 
 ---
 
@@ -212,6 +213,7 @@ This lets an SDK safely "send, and resend on missing ack / after reconnect" with
 | code | meaning | fatal (server closes) |
 |------|---------|-----------------------|
 | `UNAUTHORIZED` | bad/rotated/missing key | yes |
+| `SESSION_REPLACED` | a newer authenticated connection (or key rotation) superseded this session — newest-wins, ADR-0016 A6 (WS close 4001) | yes |
 | `VERSION_UNSUPPORTED` | protocol version out of range | yes |
 | `RATE_LIMITED` | seek/message rate exceeded (ADR-0019/0025) | no |
 | `INVALID_MESSAGE` | unknown type / malformed JSON | no |

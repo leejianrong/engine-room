@@ -8,11 +8,11 @@ where they disagree, and update the docs.
 
 | Area | State |
 |------|-------|
-| **V1 walking skeleton** | ✅ done — stub-auth bot ↔ house `RandomBot`, server-authoritative clock, `python-chess` rules, live SSE spectating, SvelteKit board, Postgres finalization |
-| Real auth (GitHub OAuth, hashed per-bot keys) | ❌ V2 — V1 uses a single stub dev token |
-| Elo matchmaking / pools / TTL / same-owner exclusion | ❌ V3 — V1 always-pairs vs the house bot |
+| **V1 walking skeleton** | ✅ done — bot ↔ house `RandomBot`, server-authoritative clock, `python-chess` rules, live SSE spectating, SvelteKit board, Postgres finalization |
+| **V2 real identity** | ✅ done — GitHub OAuth (FastAPI-Users, stateless JWT/Bearer), bot CRUD (5/user cap), one rotatable per-bot API key (HMAC-hashed, shown once), real WS-handshake key auth + newest-wins, `games` bot FKs. REST at `/api/auth/github`, `/api/users`, `/api/bots`; backend `auth/` + `bots/` packages |
+| Elo matchmaking / pools / TTL / same-owner exclusion | ❌ V3 — V2 still always-pairs vs the house bot |
 | Reconnect, `ply`-idempotency, heartbeat, illegal-move forfeit | ❌ V4 |
-| Resign / draw / auto-draw, real Elo updates | ❌ V5 — V1 game_over rating is stubbed |
+| Resign / draw / auto-draw, real Elo updates | ❌ V5 — game_over rating is stubbed |
 | Dashboard + lobby + catch-up snapshot + replay | ❌ V6 — V1 view watches one game by `?game=<id>` |
 | Packaged `chessroom` SDK + UCI bridge (separate repo) | ❌ V7 — V1's client is `tests/support/fake_client.py` |
 
@@ -65,17 +65,30 @@ avoid collisions). Frontend → backend is **cross-origin via CORS** (see `confi
 
 ## Workflow conventions
 
-- **Now (V1 bootstrap):** small, per-sub-step commits directly on `main`, pushed after `pytest`
-  is green. Commit messages end with the Co-Authored-By trailer.
-- **Planned (from V2 — Phase D, see docs/WORKFLOW-ADOPTION.md):** branch-per-slice off fresh
-  `main`, PR-only merges with CI green as the gate, protected `main`, worktrees for parallel work.
+- **Now (from V2 — Phase D adopted):** branch-per-slice off fresh `main` (e.g. `feat/v2-identity`),
+  small per-sub-step commits, **PR-only merges with CI green as the gate**. Commit messages end
+  with the Co-Authored-By trailer. (Branch **protection** on `main` needs GitHub Pro / a public
+  repo — not yet enforced server-side on this private free repo; the discipline is followed by
+  convention. See docs/WORKFLOW-ADOPTION.md.)
 - **Pre-push hook** mirrors the fast CI jobs (ruff + `pytest tests/unit` + `npm run check`).
   `git push --no-verify` bypasses it for a one-off.
 - Prefer Claude Code `isolation: "worktree"` for parallel file-mutating agent work.
+
+## Auth (V2)
+
+- **Humans** sign in with GitHub OAuth → a stateless **JWT** (Bearer) session. Secrets:
+  `ER_AUTH_SECRET` (JWT + OAuth state), `ER_GITHUB_OAUTH_CLIENT_ID`/`_SECRET` (empty in dev/CI —
+  tests stub the provider). Bot management REST is auth-guarded + owner-scoped. The OAuth CSRF
+  cookie is `Secure` (HTTPS) by default; set `ER_OAUTH_COOKIE_SECURE=false` to run the real GitHub
+  flow over plain `http://localhost` in dev.
+- **Bots** authenticate the WS handshake with a per-bot key `crbk_<43 base62>` in
+  `Authorization: Bearer`. Stored only as `HMAC-SHA256(ER_API_KEY_PEPPER, key)`; shown once;
+  rotation invalidates instantly + boots the live session (newest-wins). `ER_API_KEY_PEPPER` and
+  `ER_AUTH_SECRET` **must** be set in production.
 
 ## Docs map
 
 - `docs/README.md` — index. `docs/design/` — REQS, CONTEXT (glossary/domain), PRD, PROTOCOL (wire
   contract), QUESTIONS. `docs/adr/` — 25 decision records. `docs/shaping/` — build plan
-  (frame → shaping → slices → V1-plan). `docs/DEVELOPER-WORKFLOWS.md` — the playbook;
+  (frame → shaping → slices → V1-plan, V2-plan). `docs/DEVELOPER-WORKFLOWS.md` — the playbook;
   `docs/WORKFLOW-ADOPTION.md` — what we've adopted and what's deferred.
