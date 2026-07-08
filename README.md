@@ -46,6 +46,30 @@ Start at the **[docs index](docs/README.md)**. The key documents:
 - **Frontend:** TypeScript, SvelteKit + Vite (static SPA, SSE-driven).
 - **Bot SDK:** `chessroom` Python package — a *separate* repo (depends only on the versioned protocol spec, ADR-0021); not in this repo.
 
+## Try it out — watch a live match
+
+Run the whole platform with Docker, then start a bot match and spectate it:
+
+```bash
+# 1. build + run db + backend + frontend
+docker compose --profile app up --build          # backend :8001, frontend :5174
+
+# 2. in another terminal, start a match vs the house bot
+cd server && uv run python ../scripts/demo_bot.py
+#   → prints:  Watch it here:  http://localhost:5174/?game=game_xxxxxxxx
+
+# 3. open that URL in your browser and watch the board update move-by-move
+#    (--loop keeps starting fresh games; --move-delay 1.5 slows it down)
+
+# stop everything
+docker compose --profile app down
+```
+
+Why a separate bot script? V1 has **no lobby yet** (that's V6), and bots are external
+clients that connect *to* the platform — so a match only exists once a bot seeks one.
+`scripts/demo_bot.py` is a throwaway stand-in for the future `chessroom` SDK; it prints the
+`game_id` you need to spectate.
+
 ## Local development
 
 Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js, Docker.

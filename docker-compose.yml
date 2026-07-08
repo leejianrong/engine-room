@@ -1,5 +1,9 @@
-# Local Postgres for development (ADR-0005/0018). Live game state is in-memory
-# in the worker; this stores durable records written at finalization.
+# Local stack.
+#   docker compose up -d db                     # just Postgres (dev: run app via uv/npm)
+#   docker compose --profile app up --build     # whole platform: db + backend + frontend
+#
+# Live game state is in-memory in the worker (ADR-0018); Postgres stores durable
+# records written at finalization.
 services:
   db:
     image: postgres:16
@@ -17,6 +21,29 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
+
+  backend:
+    profiles: ["app"]
+    build: ./server
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ER_DATABASE_URL: postgresql+asyncpg://engine_room:engine_room@db:5432/engine_room
+      # CORS default already allows http://localhost:5174 (the frontend origin).
+    ports:
+      - "8001:8001"
+
+  frontend:
+    profiles: ["app"]
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: "http://localhost:8001"
+    depends_on:
+      - backend
+    ports:
+      - "5174:80"
 
 volumes:
   pgdata:
