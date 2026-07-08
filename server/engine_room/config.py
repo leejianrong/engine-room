@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     github_oauth_client_secret: str = ""
     github_oauth_redirect_url: str | None = None
 
+    # The OAuth CSRF cookie is `Secure` by default (production runs behind HTTPS).
+    # Set ER_OAUTH_COOKIE_SECURE=false to exercise the real GitHub flow over plain
+    # http://localhost in dev, where a Secure cookie would otherwise be dropped.
+    oauth_cookie_secure: bool = True
+
     # Browser origins allowed to call the API (spectator SSE from the SvelteKit
     # dev server on :5174). Override with ER_CORS_ALLOW_ORIGINS as a JSON list.
     cors_allow_origins: list[str] = [

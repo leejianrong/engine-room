@@ -20,6 +20,11 @@ def _postgres_url():
 
 @pytest_asyncio.fixture
 async def session_factory(_postgres_url):
+    # REVISIT (WORKFLOW-ADOPTION Phase-D follow-up): build the schema by running
+    # the real Alembic chain (`alembic upgrade head`) instead of `create_all`, so
+    # every integration test also exercises the migrations. `test_v2_migrations`
+    # covers the chain on a fresh container for now; env.py already accepts an
+    # explicit `sqlalchemy.url`, so switching here is straightforward.
     from engine_room.persistence.models import Base
 
     async_url = _postgres_url.replace("+psycopg", "+asyncpg")

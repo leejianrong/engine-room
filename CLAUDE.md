@@ -78,7 +78,9 @@ avoid collisions). Frontend → backend is **cross-origin via CORS** (see `confi
 
 - **Humans** sign in with GitHub OAuth → a stateless **JWT** (Bearer) session. Secrets:
   `ER_AUTH_SECRET` (JWT + OAuth state), `ER_GITHUB_OAUTH_CLIENT_ID`/`_SECRET` (empty in dev/CI —
-  tests stub the provider). Bot management REST is auth-guarded + owner-scoped.
+  tests stub the provider). Bot management REST is auth-guarded + owner-scoped. The OAuth CSRF
+  cookie is `Secure` (HTTPS) by default; set `ER_OAUTH_COOKIE_SECURE=false` to run the real GitHub
+  flow over plain `http://localhost` in dev.
 - **Bots** authenticate the WS handshake with a per-bot key `crbk_<43 base62>` in
   `Authorization: Bearer`. Stored only as `HMAC-SHA256(ER_API_KEY_PEPPER, key)`; shown once;
   rotation invalidates instantly + boots the live session (newest-wins). `ER_API_KEY_PEPPER` and

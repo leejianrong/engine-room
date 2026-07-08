@@ -37,4 +37,6 @@ def make_github_oauth_router() -> APIRouter:
         redirect_url=settings.github_oauth_redirect_url,
         associate_by_email=True,
         is_verified_by_default=True,
+        # Secure by default (HTTPS prod); flip off for local http dev (see config).
+        csrf_token_cookie_secure=settings.oauth_cookie_secure,
     )

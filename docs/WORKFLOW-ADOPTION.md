@@ -1,8 +1,9 @@
 # Workflow adoption — status
 
 Tracks how much of [DEVELOPER-WORKFLOWS.md](DEVELOPER-WORKFLOWS.md) (the portable playbook)
-engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2** (branch
-protection pending a repo-plan change); Playwright + deploy still deferred.
+engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2.**
+Server-enforced branch protection is intentionally skipped (private repo — see divergences);
+Playwright + deploy still deferred.
 
 ## Adopted (Phases A–C, 2026-07-08)
 
@@ -27,9 +28,9 @@ Test counts today: **41 unit + 17 integration = 58**, ruff clean (V2).
 
 | Item | Why not yet | Trigger to do it |
 |------|-------------|------------------|
-| **Server-enforced branch protection on `main`** (§6) | GitHub refuses branch-protection rules on a **private repo without GitHub Pro** (403). The branch/PR discipline is followed by convention meanwhile. | Make the repo public, or upgrade to Pro; then `PUT /repos/:owner/:repo/branches/main/protection` requiring the `lint`/`unit`/`integration`/`frontend` checks. |
+| **Real migrations in the integration fixture** (§1a) | The `session_factory` fixture builds the schema with `create_all`, not the Alembic chain; `0002`'s SQL is validated separately by `test_v2_migrations` on a fresh container. **Revisit: switch the fixture to `alembic upgrade head`** so every integration test also exercises the migrations (and drift can't hide). | Do it when convenient (good early-V3 chore); the env.py `sqlalchemy.url` hook already added for the migration test makes this straightforward. |
 | **Playwright browser e2e** (§1b) | Heaviest item; the live-server SSE test already covers the data path end-to-end. The gap is pixel-level DOM rendering. | When a UI regression needs guarding (V6 dashboard). |
-| **Deploy gated on CI** (§5) | Hosting target is undecided — **QUESTIONS.md K3** is still open. The playbook deploys to Fly.io; we haven't chosen. | When K3 is decided. |
+| **Deploy gated on CI** (§5) | Hosting target undecided — **QUESTIONS.md K3** still open. The playbook deploys to Fly.io. | When K3 is decided. |
 
 ## Deliberate divergences from the playbook
 
@@ -38,6 +39,10 @@ Test counts today: **41 unit + 17 integration = 58**, ruff clean (V2).
   cross-origin. Revisit at deploy time when the production topology (reverse proxy vs. separate
   origins) is known.
 - **Ports** moved off defaults: backend **:8001**, frontend **:5174**, Postgres **:5433**.
-- **`create_all` (not alembic) in the integration fixture.** Simpler given the config singleton;
-  a future refinement is running real migrations in the fixture (also exercises the migrations),
-  as the playbook's §1a does.
+- **`create_all` (not alembic) in the integration fixture.** Simpler given the config singleton.
+  Tracked as a Phase-D revisit above (switch to real migrations); `test_v2_migrations` covers the
+  Alembic chain on a fresh container in the meantime.
+- **No server-enforced branch protection on `main`** — the repo is deliberately **private** and
+  GitHub gates branch-protection rules behind Pro/public (403). The branch-per-slice + PR-only +
+  CI-green flow is followed **by convention** (CLAUDE.md "Workflow conventions"); not revisiting
+  unless the repo goes public.
