@@ -43,9 +43,19 @@ class Seek(BaseModel):
     id: Optional[str] = None  # client correlation id, echoed on the ack
 
 
+class Move(BaseModel):
+    type: Literal["move"]
+    game_id: str
+    ply: int
+    uci: str
+    id: Optional[str] = None  # client correlation id, echoed on move_ack
+    offer_draw: bool = False  # honored in V5
+
+
 _CLIENT_MODELS: dict[str, type[BaseModel]] = {
     "hello": Hello,
     "seek": Seek,
+    "move": Move,
 }
 
 
@@ -81,6 +91,40 @@ class GameStart(BaseModel):
     initial_fen: str
     clocks: Clocks
     start_grace_ms: int = 10000  # PAIRED->IN_PROGRESS grace (ADR-0016 E7)
+
+
+class YourTurn(BaseModel):
+    type: Literal["your_turn"] = "your_turn"
+    game_id: str
+    ply: int
+    fen: str  # full FEN every turn (PROTOCOL.md §6, resolves B5)
+    last_move: Optional[dict] = None  # {"uci","san"} of opponent's move, or null
+    clocks: Clocks
+    your_color: str
+    opponent_draw_offer: bool = False
+
+
+class MoveAck(BaseModel):
+    type: Literal["move_ack"] = "move_ack"
+    game_id: str
+    ply: int
+    accepted: bool = True
+    id: Optional[str] = None
+
+
+class Rating(BaseModel):
+    before: int
+    after: int
+
+
+class GameOver(BaseModel):
+    type: Literal["game_over"] = "game_over"
+    game_id: str
+    result: str  # white_wins | black_wins | draw | aborted
+    termination: str  # ADR-0008 vocabulary
+    final_fen: str
+    pgn: str
+    rating: Optional[Rating] = None  # this bot's Elo change; stubbed in V1, real in V5
 
 
 class Error(BaseModel):

@@ -19,6 +19,9 @@ class Session:
         self.bot = bot
         self.session_id = session_id
         self._send_lock = asyncio.Lock()
+        # In-game messages (move, ...) the endpoint routes here for the game loop
+        # to consume, so the socket has a single reader (the endpoint).
+        self.inbound: asyncio.Queue = asyncio.Queue()
 
     async def send(self, message: BaseModel) -> None:
         """Serialize and send one outbound message as a JSON text frame."""

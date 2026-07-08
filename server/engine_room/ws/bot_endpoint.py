@@ -5,10 +5,13 @@ check, and `seek`->`seek_ack` (enqueue only). Pairing, the game loop, and
 reconnect arrive in later sub-steps.
 """
 
+import asyncio
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..config import settings
 from ..game.game import Game
+from ..game.worker import run_game
 from ..ids import new_id
 from ..protocol.messages import (
     BotInfo,
@@ -16,6 +19,7 @@ from ..protocol.messages import (
     Error,
     GameStart,
     Hello,
+    Move,
     ProtocolError,
     Seek,
     SeekAck,
@@ -25,6 +29,9 @@ from ..protocol.messages import (
 from .session import Session
 
 router = APIRouter()
+
+# Keep strong refs to in-flight game tasks so they aren't garbage-collected.
+_running_games: set[asyncio.Task] = set()
 
 SERVER_PROTOCOL_VERSION = "1.0"
 SUPPORTED_VERSIONS = {"1.0"}
@@ -115,6 +122,12 @@ async def bot_ws(websocket: WebSocket) -> None:
                 await session.send(SeekAck(id=msg.id, seek_id=result.seek_id, status="queued"))
                 if result.game is not None:
                     await session.send(_game_start_for(result.game, session))
+                    task = asyncio.create_task(run_game(result.game))
+                    _running_games.add(task)
+                    task.add_done_callback(_running_games.discard)
+            elif isinstance(msg, Move):
+                # Single socket reader: hand in-game moves to the game loop.
+                await session.inbound.put(msg)
             elif isinstance(msg, Hello):
                 await session.send(
                     Error(code="INVALID_MESSAGE", message="already handshaken", fatal=False)

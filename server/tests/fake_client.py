@@ -8,9 +8,11 @@ timing-sensitive edge cases deterministically.
 
 from __future__ import annotations
 
+import random
 from contextlib import contextmanager
 from typing import Any, Iterator
 
+import chess
 from starlette.testclient import TestClient
 
 from engine_room.app import create_app
@@ -49,6 +51,30 @@ class FakeBot:
             }
         )
         return self.recv()  # seek_ack (or error)
+
+    def play_out(self, seed: int = 0, max_plies: int = 4000) -> dict:
+        """Play random legal moves in response to each your_turn until game_over.
+
+        Returns the game_over message. Raises on any error frame or if the game
+        runs impossibly long (guards against a hang).
+        """
+        rng = random.Random(seed)
+        for _ in range(max_plies):
+            msg = self.recv()
+            kind = msg["type"]
+            if kind == "your_turn":
+                board = chess.Board(msg["fen"])
+                move = rng.choice(list(board.legal_moves))
+                self.send(
+                    {"type": "move", "game_id": msg["game_id"], "ply": msg["ply"], "uci": move.uci()}
+                )
+            elif kind == "move_ack":
+                continue
+            elif kind == "game_over":
+                return msg
+            else:
+                raise AssertionError(f"unexpected frame during play: {msg}")
+        raise AssertionError("game did not terminate within max_plies")
 
 
 @contextmanager

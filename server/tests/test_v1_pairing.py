@@ -1,5 +1,6 @@
 """V1 sub-step 3 checkpoint: a seek pairs the bot with a house bot (game_start)."""
 
+from engine_room.app import create_app
 from fake_client import connect
 
 
@@ -30,10 +31,14 @@ def test_five_plus_zero_pool_clocks():
 
 
 def test_each_seek_gets_a_distinct_game():
-    with connect() as bot:
-        bot.hello()
-        bot.seek(cid="c1")
-        g1 = bot.expect("game_start")
-        bot.seek(cid="c2")
-        g2 = bot.expect("game_start")
+    # Two independent bots on the same server each get their own game vs house.
+    app = create_app()
+    with connect(app=app) as bot1:
+        bot1.hello()
+        bot1.seek()
+        g1 = bot1.expect("game_start")
+        with connect(app=app) as bot2:
+            bot2.hello()
+            bot2.seek()
+            g2 = bot2.expect("game_start")
     assert g1["game_id"] != g2["game_id"]
