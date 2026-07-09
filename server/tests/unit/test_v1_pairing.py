@@ -15,7 +15,7 @@ def test_seek_pairs_with_house_bot():
 
     assert gs["game_id"].startswith("game_")
     assert gs["your_color"] == "white"
-    assert gs["opponent"]["name"] == "house-random"
+    assert gs["opponent"]["name"] == "ephraim-bot"
     assert gs["opponent"]["rating"] == 1200
     assert gs["time_control"] == {"base_seconds": 180, "increment_seconds": 0}
     assert gs["clocks"] == {"white_ms": 180000, "black_ms": 180000}

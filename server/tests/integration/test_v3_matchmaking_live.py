@@ -161,4 +161,4 @@ async def test_greeter_gives_a_lone_3plus0_seeker_a_house_game():
             await _hello_seek(a, base_seconds=180)
             gs = await _next(a)
     assert gs["type"] == "game_start"
-    assert gs["opponent"]["name"] == "house-random"
+    assert gs["opponent"]["name"] == "ephraim-bot"

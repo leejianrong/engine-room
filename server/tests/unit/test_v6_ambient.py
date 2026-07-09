@@ -7,8 +7,10 @@ import asyncio
 
 from engine_room.game.ambient import AmbientSupervisor, parse_pool
 from engine_room.game.house_bots import (
-    HOUSE_RANDOM_2_ID,
-    HOUSE_RANDOM_2_NAME,
+    JIAN_001_ID,
+    JIAN_001_NAME,
+    JIAN_002_ID,
+    JIAN_002_NAME,
     RandomBot,
 )
 from engine_room.game.registry import GameRegistry
@@ -38,8 +40,10 @@ class _FakeLauncher:
 
 
 def _supervisor(reg, launcher, n):
-    a = RandomBot()
-    b = RandomBot(id=HOUSE_RANDOM_2_ID, name=HOUSE_RANDOM_2_NAME)
+    # Fast random movers with the permanent-bot identities (the supervisor logic
+    # under test is mover-agnostic; production uses MinimaxBot).
+    a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)
+    b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)
     return AmbientSupervisor(
         reg, launcher, a, b, n=n, time_control=TimeControl(base_seconds=180)
     )
@@ -96,3 +100,25 @@ async def test_stop_cancels_and_clears():
     await sup.stop()
     # Cancelled games are removed from the registry (no refill while closing).
     assert reg.list_active() == []
+
+
+def test_house_bot_personas_pick_legal_moves():
+    """The two personas: ephraim (RandomBot, easy) and jian (MinimaxBot)."""
+    import chess
+
+    from engine_room.game.house_bots import (
+        EPHRAIM_ID,
+        EPHRAIM_NAME,
+        JIAN_001_NAME,
+        MinimaxBot,
+        RandomBot,
+    )
+
+    ephraim = RandomBot()  # defaults to the ephemeral greeter identity
+    assert (ephraim.info.id, ephraim.info.name) == (EPHRAIM_ID, EPHRAIM_NAME)
+    legal = {m.uci() for m in chess.Board().legal_moves}
+    assert ephraim.choose_move(chess.Board()) in legal
+
+    jian = MinimaxBot(depth=2)  # shallow keeps the unit test fast
+    assert jian.info.name == JIAN_001_NAME
+    assert jian.choose_move(chess.Board()) in legal

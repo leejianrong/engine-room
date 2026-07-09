@@ -11,19 +11,24 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ..game.house_bots import (
-    HOUSE_RANDOM_2_ID,
-    HOUSE_RANDOM_2_NAME,
-    HOUSE_RANDOM_2_RATING,
-    HOUSE_RANDOM_ID,
-    HOUSE_RANDOM_NAME,
-    HOUSE_RANDOM_RATING,
+    EPHRAIM_ID,
+    EPHRAIM_NAME,
+    EPHRAIM_RATING,
+    JIAN_001_ID,
+    JIAN_001_NAME,
+    JIAN_001_RATING,
+    JIAN_002_ID,
+    JIAN_002_NAME,
+    JIAN_002_RATING,
 )
 from .models import Bot
 
 _HOUSE_BOTS = (
-    (HOUSE_RANDOM_ID, HOUSE_RANDOM_NAME, HOUSE_RANDOM_RATING),
-    # V6: the ambient house-vs-house opponent (ADR-0022 Kind-1).
-    (HOUSE_RANDOM_2_ID, HOUSE_RANDOM_2_NAME, HOUSE_RANDOM_2_RATING),
+    # Ephemeral greeter (Kind-2): easy/random one-off opponent.
+    (EPHRAIM_ID, EPHRAIM_NAME, EPHRAIM_RATING),
+    # Permanent ambient bots (Kind-1): minimax lobby residents.
+    (JIAN_001_ID, JIAN_001_NAME, JIAN_001_RATING),
+    (JIAN_002_ID, JIAN_002_NAME, JIAN_002_RATING),
 )
 
 

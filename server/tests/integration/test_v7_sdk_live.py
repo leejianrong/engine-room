@@ -7,7 +7,7 @@ either side. The SDK source is imported from the sibling monorepo package
 (`sdk/chessroom`); it is a separate uv project with no `engine_room` dependency
 (asserted by the SDK's own boundary test).
 
-- The SDK's RandomBot plays a full greeter game (Kind-2 house-random) to game_over,
+- The SDK's RandomBot plays a full greeter game (Kind-2 ephraim-bot) to game_over,
   and appears in the lobby (`GET /api/games`) while it plays. No DB.
 - A mid-game socket drop is transparently resumed by the SDK (§8). No DB.
 - With a real DB key, the SDK's game is finalized: persisted + rated. Needs Docker.
@@ -89,7 +89,7 @@ async def test_sdk_random_bot_plays_a_greeter_game_and_shows_in_lobby():
         task = asyncio.create_task(bot._run(loop=False))
         try:
             entry = await _wait_for_lobby_game(hp, "sdk-bot")
-            assert "house-random" in (entry["white"]["name"], entry["black"]["name"])
+            assert "ephraim-bot" in (entry["white"]["name"], entry["black"]["name"])
             await asyncio.wait_for(task, timeout=60)
         finally:
             task.cancel()

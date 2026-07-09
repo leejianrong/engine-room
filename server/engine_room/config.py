@@ -150,6 +150,10 @@ class Settings(BaseSettings):
     ambient_games: int = 2
     ambient_move_delay_seconds: float = 1.0
     ambient_pool: str = "180+0"  # "<base>+<increment>" seconds — 3+0
+    # The permanent ambient bots (jian-bot-NNN) play minimax + alpha-beta; this is
+    # the search depth. Pure-Python CPU grows with depth, so dial it down on a small
+    # VM (ER_AMBIENT_MINIMAX_DEPTH). Depth 3 ≈ 0.1-0.3s/move.
+    ambient_minimax_depth: int = 3
 
     # Artificial pause before the in-process house bot replies. Default 0 (instant,
     # no production impact); local dev sets ~0.5s so house games are watchable move

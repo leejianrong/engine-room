@@ -39,7 +39,7 @@ class _BlockingSeat:
 
 async def _seed(session_factory):
     async with session_factory() as session:
-        await seed_house_bots(session)  # bot_house_random @ 1200
+        await seed_house_bots(session)  # ephraim + jian-bot-001/002 @ 1200
         session.add(
             Bot(
                 id="bot_user1",

@@ -18,9 +18,13 @@ from .bots.routes import router as bots_router
 from .config import settings
 from .game.ambient import AmbientSupervisor, parse_pool
 from .game.house_bots import (
-    HOUSE_RANDOM_2_ID,
-    HOUSE_RANDOM_2_NAME,
-    HOUSE_RANDOM_2_RATING,
+    JIAN_001_ID,
+    JIAN_001_NAME,
+    JIAN_001_RATING,
+    JIAN_002_ID,
+    JIAN_002_NAME,
+    JIAN_002_RATING,
+    MinimaxBot,
     RandomBot,
 )
 from .game.registry import GameRegistry
@@ -125,6 +129,8 @@ def create_app(
     # Single-process MVP state (ADR-0020); matchmaking + pubsub sit behind their
     # interfaces (R6) so Redis-backed impls swap in at scale-out.
     app.state.game_registry = GameRegistry()
+    # The ephemeral greeter persona (ephraim-bot): easy/random, one-and-done. Used
+    # by the on-demand greeter (Kind-2) and V1's always-pair test queue.
     app.state.house_bot = RandomBot()
     app.state.pubsub = InProcPubSub()
     app.state.finalizer = finalizer
@@ -141,8 +147,12 @@ def create_app(
     # in via settings; tests set a value explicitly. Uses its own launcher with an
     # ambient move delay so the games are watchable independent of the greeter's
     # house pacing. Launched with the same finalizer → rated + persisted (Q4).
-    app.state.house_bot_2 = RandomBot(
-        id=HOUSE_RANDOM_2_ID, name=HOUSE_RANDOM_2_NAME, rating=HOUSE_RANDOM_2_RATING
+    # The permanent ambient bots (jian-bot-001/002): minimax + alpha-beta, rated +
+    # persisted lobby residents. Distinct identities from the greeter (ephraim).
+    depth = settings.ambient_minimax_depth
+    app.state.ambient_bots = (
+        MinimaxBot(id=JIAN_001_ID, name=JIAN_001_NAME, rating=JIAN_001_RATING, depth=depth),
+        MinimaxBot(id=JIAN_002_ID, name=JIAN_002_NAME, rating=JIAN_002_RATING, depth=depth),
     )
     if ambient_games > 0:
         delay = (
@@ -159,8 +169,8 @@ def create_app(
         app.state.ambient_supervisor = AmbientSupervisor(
             app.state.game_registry,
             ambient_launcher,
-            app.state.house_bot,
-            app.state.house_bot_2,
+            app.state.ambient_bots[0],
+            app.state.ambient_bots[1],
             n=ambient_games,
             time_control=parse_pool(settings.ambient_pool),
         )
