@@ -1,6 +1,8 @@
 # Local stack.
 #   docker compose up -d db                     # just Postgres (dev: run app via uv/npm)
 #   docker compose --profile app up --build     # whole platform: db + backend + frontend
+#   docker compose --profile demo up --build    # ^ plus a looping demo bot (watch a live game)
+# (or just `make demo` / `make dev` — see the Makefile.)
 #
 # Live game state is in-memory in the worker (ADR-0018); Postgres stores durable
 # records written at finalization.
@@ -23,7 +25,7 @@ services:
       retries: 10
 
   backend:
-    profiles: ["app"]
+    profiles: ["app", "demo"]
     build: ./server
     depends_on:
       db:
@@ -35,7 +37,7 @@ services:
       - "8001:8001"
 
   frontend:
-    profiles: ["app"]
+    profiles: ["app", "demo"]
     build:
       context: ./frontend
       args:
@@ -44,6 +46,29 @@ services:
       - backend
     ports:
       - "5174:80"
+
+  # A random-mover bot that keeps starting games so there's always something live
+  # to watch. Reuses the backend image (has chess + websockets via uvicorn[standard]).
+  # Waits for the backend to finish migrating (its /health only answers after that),
+  # mints a real key straight from the DB, then loops games. Shares the backend's
+  # default ER_API_KEY_PEPPER so the minted key authenticates.
+  demo-bot:
+    profiles: ["demo"]
+    build: ./server
+    depends_on:
+      - backend
+    environment:
+      ER_DATABASE_URL: postgresql+asyncpg://engine_room:engine_room@db:5432/engine_room
+    command:
+      - sh
+      - -c
+      - |
+        until uv run python -c "import urllib.request; urllib.request.urlopen('http://backend:8001/health')" >/dev/null 2>&1; do
+          echo "demo-bot: waiting for backend…"; sleep 1;
+        done
+        KEY=$$(uv run python -m engine_room.devtools.mint_bot --quiet)
+        echo "demo-bot: minted a dev key; starting games (watch at http://localhost:5174)"
+        exec uv run python -m engine_room.devtools.demo_bot --api backend:8001 --web localhost:5174 --token "$$KEY" --loop
 
 volumes:
   pgdata:

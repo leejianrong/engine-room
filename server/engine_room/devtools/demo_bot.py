@@ -1,16 +1,22 @@
-"""Demo bot — connect to a running Engine Room, start a match vs the house bot,
-and print the spectator URL so you can watch it in the browser.
+"""Demo bot — connect to a running Engine Room, start a match, and print the
+spectator URL so you can watch it in the browser (dev only).
 
-V1 has no lobby yet, so this is how you create a game to spectate. Run it against
-the platform (e.g. after `docker compose --profile app up`):
+There's no lobby until V6, so this is how you create a game to spectate. It
+authenticates with a real `crbk_` key (V2+); pass one with `--token`, or omit it
+and one is minted for you (via `mint_bot`, needs DB access).
 
-    cd server && uv run python ../scripts/demo_bot.py            # one game
-    cd server && uv run python ../scripts/demo_bot.py --loop     # keep starting games
+    cd server
+    uv run python -m engine_room.devtools.demo_bot              # auto-mint, one game
+    uv run python -m engine_room.devtools.demo_bot --loop       # keep starting games
+    uv run python -m engine_room.devtools.demo_bot --token crbk_...   # use a specific key
 
 Options: --api ws-host (default localhost:8001), --web (default localhost:5174),
---move-delay seconds (default 0.7), --startup-delay seconds (default 4),
---base/--inc time control, --token (default dev-token).
+--move-delay s (0.7), --startup-delay s (4), --base/--inc time control, --token.
+
+(`websockets` is available in the server image via uvicorn[standard].)
 """
+
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -21,13 +27,15 @@ import chess
 import websockets
 
 
-async def play_one(args, rng: random.Random) -> None:
+async def play_one(args, key: str, rng: random.Random) -> None:
     async with websockets.connect(
         f"ws://{args.api}/api/bot/v1",
-        additional_headers={"Authorization": f"Bearer {args.token}"},
+        additional_headers={"Authorization": f"Bearer {key}"},
     ) as ws:
         await ws.send(json.dumps({"type": "hello", "protocol_version": "1.0"}))
-        await ws.recv()  # welcome
+        welcome = json.loads(await ws.recv())
+        if welcome.get("type") != "welcome":
+            raise SystemExit(f"handshake failed: {welcome}")
         await ws.send(
             json.dumps(
                 {
@@ -38,7 +46,11 @@ async def play_one(args, rng: random.Random) -> None:
             )
         )
         await ws.recv()  # seek_ack
+        # game_start is asynchronous since V3 (the matcher pairs us — with a real
+        # opponent if one is queued, else the 3+0 greeter house bot).
         game_start = json.loads(await ws.recv())
+        if game_start.get("type") != "game_start":
+            raise SystemExit(f"expected game_start, got {game_start}")
         game_id = game_start["game_id"]
         turn = json.loads(await ws.recv())  # your_turn ply 0
 
@@ -67,11 +79,21 @@ async def play_one(args, rng: random.Random) -> None:
                     return
 
 
+async def _resolve_key(args) -> str:
+    if args.token:
+        return args.token
+    from .mint_bot import mint_key  # local import: only needed for auto-mint
+
+    _, key = await mint_key()
+    print("demo-bot: no --token given; minted a local dev key.", flush=True)
+    return key
+
+
 async def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--api", default="localhost:8001", help="backend host:port")
     p.add_argument("--web", default="localhost:5174", help="frontend host:port (for the URL)")
-    p.add_argument("--token", default="dev-token")
+    p.add_argument("--token", default=None, help="crbk_ API key; auto-minted if omitted")
     p.add_argument("--base", type=int, default=180)
     p.add_argument("--inc", type=int, default=0)
     p.add_argument("--move-delay", type=float, default=0.7, dest="move_delay")
@@ -79,9 +101,10 @@ async def main() -> None:
     p.add_argument("--loop", action="store_true", help="keep starting new games")
     args = p.parse_args()
 
+    key = await _resolve_key(args)
     rng = random.Random()
     while True:
-        await play_one(args, rng)
+        await play_one(args, key, rng)
         if not args.loop:
             return
 

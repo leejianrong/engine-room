@@ -33,6 +33,11 @@ docker-compose.yml   local Postgres on host :5433
 
 ## Commands
 
+**Shortcuts (Makefile):** `make demo` = whole platform + a looping demo bot in Docker (one
+command to watch a live game); `make dev` = db + backend + frontend with hot reload, then
+`make bot` (another terminal) to start a game; `make mint` prints a real `crbk_` key; `make test`
+= fast gate. `make help` lists all targets. The raw steps below are what they wrap.
+
 ```bash
 # once per clone (installs the fast pre-push gate)
 ln -sf ../../scripts/git-hooks/pre-push .git/hooks/pre-push
