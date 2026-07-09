@@ -79,6 +79,10 @@ class FakeBot:
         )
         return self.recv()  # seek_ack (or error)
 
+    def seek_cancel(self, seek_id: str) -> dict:
+        self.send({"type": "seek_cancel", "seek_id": seek_id})
+        return self.recv()  # seek_ended (or error)
+
     def play_out(self, seed: int = 0, max_plies: int = 4000) -> dict:
         """Play random legal moves in response to each your_turn until game_over.
 
@@ -111,16 +115,24 @@ class FakeBot:
 
 @contextmanager
 def connect(
-    token: str | None = DEFAULT_TOKEN, app=None, authenticator=None
+    token: str | None = DEFAULT_TOKEN, app=None, authenticator=None, always_pair: bool = False
 ) -> Iterator[FakeBot]:
     """Open an authenticated bot WebSocket. Pass token=None to omit the header.
 
     Builds an app with a FakeBotAuthenticator (accepting DEFAULT_TOKEN) unless an
     `app` or `authenticator` is supplied — so existing single-bot tests keep
     working while newest-wins/multi-bot tests can inject their own identities.
-    """
+
+    `always_pair=True` wires V1's synchronous always-pair-vs-house queue so a lone
+    seek yields an instant `game_start` (deterministic, no matcher loop) — for the
+    game-loop/pairing tests that exercise the game, not V3 matchmaking. Left False,
+    the real Elo matcher is used (its WS pairing behavior is covered by the
+    live-uvicorn integration tests, D-iv)."""
     if app is None:
-        app = create_app(bot_authenticator=authenticator or default_authenticator())
+        app = create_app(
+            bot_authenticator=authenticator or default_authenticator(),
+            always_pair=always_pair,
+        )
     client = TestClient(app)
     headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
     with client.websocket_connect(BOT_WS_PATH, headers=headers) as ws:

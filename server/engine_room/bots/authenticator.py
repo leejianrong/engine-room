@@ -46,4 +46,9 @@ class PostgresBotAuthenticator:
             bot = await session.scalar(select(Bot).where(Bot.key_hash == key_hash))
         if bot is None:
             return None
-        return BotInfo(id=bot.id, name=bot.name, rating=bot.rating)
+        return BotInfo(
+            id=bot.id,
+            name=bot.name,
+            rating=bot.rating,
+            owner_id=str(bot.owner_id) if bot.owner_id is not None else None,
+        )

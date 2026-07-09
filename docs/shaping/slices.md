@@ -19,7 +19,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 |-------|-----------|-----------------|----------|
 | **V1** ✅ | A1 | Stub-auth bot ↔ house `RandomBot` plays a full real 3+0 game under the server clock; moves stream live to a SvelteKit page; result+PGN in Postgres | — (skeleton) |
 | **V2** ✅ | A2 | Sign in with GitHub, create a bot, get a key once; the **real key** authenticates the WS handshake (stub-auth removed) | N1 auth; +REST bot-CRUD; newest-wins |
-| **V3** | A3 | Two real user bots get matched by Elo in a 3+0 pool; same-owner bots never paired; a lonely seek expires | N3 matcher → pools |
+| **V3** ✅ | A3 | Two real user bots get matched by Elo in a 3+0 pool; same-owner bots never paired; a lonely seek expires | N3 matcher → pools |
 | **V4** | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
 | **V5** | A5 | Bots resign and agree draws; server auto-draws stalemate/insufficient/repetition; ratings move on FINISHED | N5/N8 outcomes |
 | **V6** | A6 | Anonymous visitor opens the dashboard, sees the live lobby, clicks a game, watches from the correct current state, replays from move 1 | N9/U1 spectator UX |
@@ -78,6 +78,23 @@ session replacement (ADR-0016 A6), rotation-terminates-live-session (ADR-0014), 
 `white_bot_id`/`black_bot_id` FKs (Alembic `0002`, house bot seeded). 41 unit + 17 integration
 tests pass. Matchmaking is still always-pair vs house (V3).
 
-## V3–V7 — defined, breadboard deferred
+## V3 — Real matchmaking
+
+**Status:** ✅ **complete** (2026-07-09). Built in 6 sub-steps (see [V3-plan.md](V3-plan.md)) on
+`feat/v3-matchmaking`. Replaces `AlwaysPairQueue` (N3) with an **Elo widening-window matcher**
+behind the same `MatchmakingQueue` interface (R6): per-time-control pools (**3+0 and 5+0**), pair
+at ≥2 eligible, closest-rating with a window that starts ±100 and widens +100/10s (uncapped after
+60s), **same-owner exclusion** (H5; house exempt), **soft anti-rematch** (E5), seek **TTL 120s** →
+`seek_ended{expired}`, `seek_cancel` → `seek_ended{cancelled}`, and a start-grace **reap** of a
+ticket whose session vanished before pairing (E7 no-show). `game_start` is now **asynchronous** — a
+background matcher loop pairs tickets and delivers it via an injected `GameLauncher` (a change from
+V1/V2's synchronous always-pair, ADR-0025). A lone 3+0 seeker gets an **on-demand greeter** house
+game (Kind-2 house, ADR-0022); **ambient pool-resident house bots** (Kind-1, house-vs-house for a
+never-empty lobby) are designed but deferred to **V6** with the lobby they feed (ADR-0022 addendum).
+Ratings are **read-only** (rating updates on FINISHED are V5, ADR-0011). No schema change. Matcher
+logic is unit-tested DB-free (injectable clock → deterministic widening/TTL) and the WS seam by a
+live-uvicorn two-bot integration test. All checks green.
+
+## V4–V7 — defined, breadboard deferred
 
 Each is a real vertical slice ending in a demo (see slice map). Full affordance breadboards are produced in this doc when the slice is picked up, and its `V<n>-plan.md` follows. Coarse thickening targets are in [shaping.md → A2–A7](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc).

@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 
 class TimeControl(BaseModel):
@@ -26,6 +26,11 @@ class BotInfo(BaseModel):
     id: str
     name: str
     rating: int
+    # Owning user (None = house bot). Carried server-side for same-owner
+    # matchmaking exclusion (ADR-0016 H5); `exclude=True` keeps it OFF the wire —
+    # PROTOCOL.md's `bot`/`opponent` are {id,name,rating} only, and an opponent
+    # must never learn who owns a bot.
+    owner_id: Optional[str] = Field(default=None, exclude=True)
 
 
 # --- inbound (client -> server) ------------------------------------------------
@@ -43,6 +48,11 @@ class Seek(BaseModel):
     id: Optional[str] = None  # client correlation id, echoed on the ack
 
 
+class SeekCancel(BaseModel):
+    type: Literal["seek_cancel"]
+    seek_id: str
+
+
 class Move(BaseModel):
     type: Literal["move"]
     game_id: str
@@ -55,6 +65,7 @@ class Move(BaseModel):
 _CLIENT_MODELS: dict[str, type[BaseModel]] = {
     "hello": Hello,
     "seek": Seek,
+    "seek_cancel": SeekCancel,
     "move": Move,
 }
 
@@ -75,6 +86,12 @@ class SeekAck(BaseModel):
     seek_id: str
     status: str = "queued"
     id: Optional[str] = None  # echoes the client's seek correlation id
+
+
+class SeekEnded(BaseModel):
+    type: Literal["seek_ended"] = "seek_ended"
+    seek_id: str
+    reason: str  # "cancelled" | "expired" (TTL, ADR-0016 E8)
 
 
 class Clocks(BaseModel):

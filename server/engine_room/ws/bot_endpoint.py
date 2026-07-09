@@ -7,31 +7,23 @@ protocol-version check, and `seek`->`seek_ack`/pairing follow. Reconnect-resume
 of a mid-game seat is V4.
 """
 
-import asyncio
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from ..game.game import Game
-from ..game.worker import run_game
 from ..ids import new_id
 from ..protocol.messages import (
-    Clocks,
     Error,
-    GameStart,
     Hello,
     Move,
     ProtocolError,
     Seek,
     SeekAck,
+    SeekCancel,
     Welcome,
     parse_client_message,
 )
 from .session import Session
 
 router = APIRouter()
-
-# Keep strong refs to in-flight game tasks so they aren't garbage-collected.
-_running_games: set[asyncio.Task] = set()
 
 SERVER_PROTOCOL_VERSION = "1.0"
 SUPPORTED_VERSIONS = {"1.0"}
@@ -126,17 +118,14 @@ async def bot_ws(websocket: WebSocket) -> None:
             if isinstance(msg, Seek):
                 result = await queue.seek(session, msg.time_control)
                 await session.send(SeekAck(id=msg.id, seek_id=result.seek_id, status="queued"))
+                # Async matcher path (V3): game_start arrives later, via the
+                # launcher. The always-pair path returns an inline game whose
+                # launch we drive here (kept working until sub-step 4 swaps it).
                 if result.game is not None:
-                    await session.send(_game_start_for(result.game, session))
-                    task = asyncio.create_task(
-                        run_game(
-                            result.game,
-                            websocket.app.state.pubsub,
-                            websocket.app.state.finalizer,
-                        )
-                    )
-                    _running_games.add(task)
-                    task.add_done_callback(_running_games.discard)
+                    await websocket.app.state.game_launcher.launch(result.game)
+            elif isinstance(msg, SeekCancel):
+                # Withdraw a waiting seek (ADR-0016 E8); matcher → seek_ended.
+                await queue.cancel(msg.seek_id)
             elif isinstance(msg, Move):
                 # Single socket reader: hand in-game moves to the game loop.
                 await session.inbound.put(msg)
@@ -154,19 +143,3 @@ async def bot_ws(websocket: WebSocket) -> None:
     finally:
         # Drop this session unless a newer one already replaced it (newest-wins).
         registry.remove_if_current(session)
-
-
-def _game_start_for(game: Game, session: Session) -> GameStart:
-    """Build game_start from the given session's perspective."""
-    if game.white.session is session:
-        your_color, opponent = "white", game.black.bot
-    else:
-        your_color, opponent = "black", game.white.bot
-    return GameStart(
-        game_id=game.id,
-        your_color=your_color,
-        opponent=opponent,
-        time_control=game.time_control,
-        initial_fen=game.initial_fen,
-        clocks=Clocks(white_ms=game.white_ms, black_ms=game.black_ms),
-    )
