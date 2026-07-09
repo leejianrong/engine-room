@@ -21,7 +21,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 | **V2** ✅ | A2 | Sign in with GitHub, create a bot, get a key once; the **real key** authenticates the WS handshake (stub-auth removed) | N1 auth; +REST bot-CRUD; newest-wins |
 | **V3** ✅ | A3 | Two real user bots get matched by Elo in a 3+0 pool; same-owner bots never paired; a lonely seek expires | N3 matcher → pools |
 | **V4** ✅ | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
-| **V5** | A5 | Bots resign and agree draws; server auto-draws stalemate/insufficient/repetition; ratings move on FINISHED | N5/N8 outcomes |
+| **V5** ✅ | A5 | Bots resign and agree draws; server auto-draws stalemate/insufficient/repetition; ratings move on FINISHED | N5/N8 outcomes |
 | **V6** | A6 | Anonymous visitor opens the dashboard, sees the live lobby, clicks a game, watches from the correct current state, replays from move 1 | N9/U1 spectator UX |
 | **V7** | A7 | A newcomer `pip`-installs `chessroom`, runs the `uv` quickstart `RandomBot`, and is playing in minutes; UCI bridge points an engine at the platform | client → packaged SDK |
 
@@ -118,6 +118,30 @@ mid-game and assert resume + finish, safe blind-resend, mutual-abandonment abort
 The demo bot (`make demo`) answers pings and reconnects+resumes; `--drop-after N` shows the kill/
 reconnect/finish live. All checks green.
 
-## V5–V7 — defined, breadboard deferred
+## V5 — Outcomes & real ratings
+
+**Status:** ✅ **complete** (2026-07-09). Built in 5 sub-steps (see [V5-plan.md](V5-plan.md)) on
+`feat/v5-outcomes`; all six open decisions were confirmed by the owner up front (K=32/16 provisional
+<30 games, single global rating; four nullable `games` rating cols + `bots.games_played`; **house
+games rate both bots**; draw offers accepted any time and surfaced on the recipient's next
+`your_turn`; anti-rematch refinement deferred; SSE `game_over` unchanged). Thickens **N5** (game loop)
+and **N8** (finalize): three new `§7` control messages (`resign`/`draw_offer`/`draw_accept`) route to
+a **per-`Game` control channel** the loop always watches — so a control that arrives when it is *not*
+the sender's turn still reaches the loop without disturbing the in-flight `request_move` (the seat
+inbox stays move-only). Resign → `resignation` (opponent wins); a draw offer (piggybacked on
+`Move.offer_draw` or a standalone `draw_offer`) sets `LiveState.pending_draw_offer`, is surfaced via
+`your_turn.opponent_draw_offer`, is implicitly declined by the recipient's move, and `draw_accept` →
+`agreement` (ADR-0016 D6). The server auto-draws every standard condition incl. claimable
+threefold/fifty via `board.outcome(claim_draw=True)` (D8) and returns **DRAW** when a flagging side's
+opponent has insufficient mating material (D7). A new pure `game/ratings.py` (Elo math, distinct from
+the pairing-window `matchmaking/elo.py`) is called by `PostgresFinalizer`, which computes both bots'
+new rating, updates `bots.rating`/`games_played`, and writes the per-color `games` rating columns in
+the **one** finalize transaction (ADR-0025 #5) — `game_over.rating` reports exactly what was
+persisted; ABORTED games write no rating. Alembic **0003** (first schema change since V2's 0002). 27
+unit + 6 integration tests added (pure Elo table, worker terminals, resign/draw WS seams, real-DB
+atomic rating write); the demo bot gains `--resign-after` and prints the rating change. All checks
+green.
+
+## V6–V7 — defined, breadboard deferred
 
 Each is a real vertical slice ending in a demo (see slice map). Full affordance breadboards are produced in this doc when the slice is picked up, and its `V<n>-plan.md` follows. Coarse thickening targets are in [shaping.md → A2–A7](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc).

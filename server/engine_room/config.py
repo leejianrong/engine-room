@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     hb_ping_interval_seconds: float = 10.0
     hb_liveness_timeout_seconds: float = 30.0  # ~3 missed pings
 
+    # --- V5 outcomes & ratings (slice A5, ADR-0011 / 0016 E8) ---
+    # Elo update on FINISHED (ABORTED never rates). K is larger while a bot is
+    # provisional (its first `elo_provisional_games` rated games) so early ratings
+    # converge faster; smaller afterwards. Single global rating per bot at MVP
+    # (per-time-control deferred). Initial rating is the bots.rating default (1200).
+    elo_k_provisional: int = 32
+    elo_k_default: int = 16
+    elo_provisional_games: int = 30
+
     # Artificial pause before the in-process house bot replies. Default 0 (instant,
     # no production impact); local dev sets ~0.5s so house games are watchable move
     # by move. Charged to the house's own clock — safe on a Blitz clock.

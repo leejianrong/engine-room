@@ -56,6 +56,9 @@ class WsSeat:
         self.color = color  # "white" | "black"
         self.rating = rating
         self._pending_id: Optional[str] = None
+        # Whether the move just returned by request_move carried a piggybacked
+        # draw offer (Move.offer_draw, §6/D6). The worker reads it after applying.
+        self._offer_draw: bool = False
         # The seat owns its inbound move queue (V4 D-i): it is the bot's durable
         # game-side identity (ADR-0009), so a blocked `get()` survives a
         # newest-wins session swap on reconnect. The endpoint routes `move`
@@ -82,7 +85,10 @@ class WsSeat:
                     black_ms=live.clock.remaining_ms(chess.BLACK),
                 ),
                 your_color=self.color,
-                opponent_draw_offer=False,
+                opponent_draw_offer=(
+                    live.pending_draw_offer is not None
+                    and live.pending_draw_offer != self.color
+                ),
             )
         )
 
@@ -98,6 +104,7 @@ class WsSeat:
         last_move: Optional[dict],
         clocks: Clocks,
         applied: Optional[dict[int, str]] = None,
+        opponent_draw_offer: bool = False,
     ) -> str:
         applied = applied or {}
         await self._send(
@@ -108,7 +115,7 @@ class WsSeat:
                 last_move=last_move,
                 clocks=clocks,
                 your_color=self.color,
-                opponent_draw_offer=False,
+                opponent_draw_offer=opponent_draw_offer,
             )
         )
         while True:
@@ -122,6 +129,7 @@ class WsSeat:
                 if move not in board.legal_moves:
                     raise IllegalMoveForfeit(self.color)
                 self._pending_id = msg.id
+                self._offer_draw = bool(msg.offer_draw)  # piggybacked draw offer (D6)
                 return msg.uci
             if msg.ply < ply:
                 # A past ply (§9): a blind resend after a blip.
@@ -142,7 +150,24 @@ class WsSeat:
             MoveAck(id=self._pending_id, game_id=self.game_id, ply=ply, accepted=True)
         )
 
-    async def game_over(self, result: str, termination: str, final_fen: str, pgn: str) -> None:
+    async def game_over(
+        self,
+        result: str,
+        termination: str,
+        final_fen: str,
+        pgn: str,
+        rating_before: Optional[int] = None,
+        rating_after: Optional[int] = None,
+    ) -> None:
+        # Real Elo (V5): the finalizer computed+persisted these in one txn
+        # (ADR-0025 #5) and the loop passes them here. ABORTED → no rating (§8).
+        # No finalizer (DB-free/house-direct path) → stub before==after.
+        if result == "aborted":
+            rating = None
+        elif rating_before is not None and rating_after is not None:
+            rating = Rating(before=rating_before, after=rating_after)
+        else:
+            rating = Rating(before=self.rating, after=self.rating)
         await self._send(
             GameOver(
                 game_id=self.game_id,
@@ -150,7 +175,7 @@ class WsSeat:
                 termination=termination,
                 final_fen=final_fen,
                 pgn=pgn,
-                rating=Rating(before=self.rating, after=self.rating),  # stubbed; real Elo in V5
+                rating=rating,
             )
         )
 
@@ -169,6 +194,7 @@ class HouseSeat:
         last_move: Optional[dict],
         clocks: Clocks,
         applied: Optional[dict[int, str]] = None,
+        opponent_draw_offer: bool = False,
     ) -> str:
         # In-process; the house bot never needs a your_turn frame and never
         # resends, so `applied` (§9 idempotency) is irrelevant here. An optional
@@ -181,5 +207,6 @@ class HouseSeat:
     async def confirm_move(self, ply: int) -> None:
         return None
 
-    async def game_over(self, result: str, termination: str, final_fen: str, pgn: str) -> None:
+    async def game_over(self, result: str, termination: str, final_fen: str, pgn: str,
+                        rating_before=None, rating_after=None) -> None:
         return None

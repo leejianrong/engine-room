@@ -95,6 +95,7 @@ On `game_start` the game is `PAIRED` (ADR-0010); clocks are **not yet running**.
 ---
 
 ## 6. In-game loop (the core exchange)
+> `opponent_draw_offer` / `move.offer_draw` are live as of V5 (§7).
 
 ### `your_turn` (server → client)
 ```json
@@ -133,7 +134,9 @@ Confirms receipt/application. If the client gets no `move_ack` (network blip), i
 
 ---
 
-## 7. Control messages
+## 7. Control messages — *implemented in V5*
+Control frames are routed to a per-game control channel the loop always watches, so a `resign` or
+`draw_accept` sent when it is **not** the sender's turn is still honored (V5).
 
 ### Resign (client → server)
 ```json
@@ -156,7 +159,7 @@ Confirms receipt/application. If the client gets no `move_ack` (network blip), i
 
 ## 8. Game end & reconnect payload
 
-### `game_over` (server → client)
+### `game_over` (server → client) — `rating` real as of V5
 ```json
 {
   "type": "game_over",

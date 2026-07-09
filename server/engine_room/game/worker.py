@@ -16,17 +16,27 @@ import chess
 import chess.pgn
 
 from ..channels import game_channel
-from ..protocol.messages import Clocks
+from ..protocol.messages import Clocks, DrawAccept, DrawOffer, Resign
 from .clock import Clock
 from .game import Game, LiveState
 from .seat import HouseSeat, IllegalMoveForfeit, WsSeat
 
+_COLOR_NAME = {chess.WHITE: "white", chess.BLACK: "black"}
+
+
+def _other(color: str) -> str:
+    return "black" if color == "white" else "white"
+
 if TYPE_CHECKING:
+    from ..persistence.finalize import FinalizeResult
     from ..pubsub.base import PubSub
     from .registry import GameRegistry
 
-# (game, result, termination, final_fen, pgn) -> None
-Finalizer = Callable[[Game, str, str, str, str], Awaitable[None]]
+# (game, result, termination, final_fen, pgn) -> FinalizeResult | None
+# The result carries each side's persisted Elo (before, after) so game_over can
+# report the same numbers that were written (ADR-0025 #5); None on ABORTED or the
+# DB-free path (then the loop stubs the rating).
+Finalizer = Callable[[Game, str, str, str, str], Awaitable["Optional[FinalizeResult]"]]
 
 # python-chess termination -> ADR-0008 termination-reason vocabulary
 _TERMINATION = {
@@ -78,6 +88,16 @@ def _outcome_to_result(outcome: chess.Outcome) -> tuple[str, str]:
     else:
         result = "draw"
     return result, _TERMINATION.get(outcome.termination, "aborted")
+
+
+def _timeout_result(board: chess.Board, flagged: bool) -> tuple[str, str]:
+    """The result when `flagged` (a chess color) runs out of clock. Normally the
+    opponent wins on time, but if the opponent has insufficient mating material
+    the game is a DRAW, not a win (ADR-0016 D7; python-chess decides)."""
+    winner = not flagged
+    if board.has_insufficient_material(winner):
+        return "draw", "insufficient_material"
+    return ("black_wins" if flagged == chess.WHITE else "white_wins"), "timeout"
 
 
 def _render_pgn(game: Game, board: chess.Board) -> str:
@@ -139,11 +159,13 @@ async def run_game(
     # turns; cancelled after the loop.
     abort_wait = asyncio.ensure_future(game.abort.wait())
 
-    while True:
+    while result is None:
         color = board.turn
+        name = _COLOR_NAME[color]
         seat = seats[color]
         ply = live.ply
         t0 = loop.time()
+        deadline = clock.deadline_s(color)
         move_task = asyncio.ensure_future(
             seat.request_move(
                 board=board,
@@ -151,35 +173,67 @@ async def run_game(
                 last_move=live.last_move,
                 clocks=_clocks(clock),
                 applied=live.applied,
+                # Surface a standing offer from the opponent (D6).
+                opponent_draw_offer=(
+                    live.pending_draw_offer is not None
+                    and live.pending_draw_offer != name
+                ),
             )
         )
-        done, _ = await asyncio.wait(
-            {move_task, abort_wait},
-            timeout=clock.deadline_s(color),
-            return_when=asyncio.FIRST_COMPLETED,
-        )
+        # Inner loop: resolve THIS turn. `move_task`/`abort_wait` persist across
+        # control drains; only `ctrl_task` is recreated each pass (V5 D-a).
+        uci = None
+        while result is None and uci is None:
+            ctrl_task = asyncio.ensure_future(game.controls.get())
+            done, _ = await asyncio.wait(
+                {move_task, abort_wait, ctrl_task},
+                timeout=max(0.0, deadline - (loop.time() - t0)),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if ctrl_task not in done:
+                ctrl_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await ctrl_task
 
-        if abort_wait in done:
-            # Both seats gone → abort with no result (ADR-0010/0016 I7).
-            move_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await move_task
-            result, termination = "aborted", "aborted"
-            break
-        if move_task not in done:
-            # Neither a move nor an abort within the deadline → flag on time.
-            move_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await move_task
-            result = "black_wins" if color == chess.WHITE else "white_wins"
-            termination = "timeout"
-            break
-        try:
-            uci = move_task.result()
-        except IllegalMoveForfeit:
-            # Illegal/unparseable move on your turn = instant forfeit (ADR-0016 B7).
-            result = "black_wins" if color == chess.WHITE else "white_wins"
-            termination = "illegal_move"
+            if abort_wait in done:
+                move_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await move_task
+                result, termination = "aborted", "aborted"  # (I7)
+            elif ctrl_task in done:
+                c_color, c_msg = ctrl_task.result()
+                if isinstance(c_msg, Resign):
+                    # Resign is unconditional — the sender loses (ADR-0008).
+                    result = "black_wins" if c_color == "white" else "white_wins"
+                    termination = "resignation"
+                elif isinstance(c_msg, DrawAccept):
+                    # Valid only against a standing offer from the OTHER side (D6).
+                    if live.pending_draw_offer == _other(c_color):
+                        result, termination = "draw", "agreement"
+                    # else: nothing to accept → ignore, keep waiting.
+                elif isinstance(c_msg, DrawOffer):
+                    # Standing until the recipient moves; surfaced on their next
+                    # your_turn (D6). No your_turn re-send mid-turn (O-1).
+                    live.pending_draw_offer = c_color
+                if result is not None:
+                    move_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await move_task
+            elif move_task in done:
+                try:
+                    uci = move_task.result()
+                except IllegalMoveForfeit:
+                    # Illegal/unparseable move = instant forfeit (ADR-0016 B7).
+                    result = "black_wins" if color == chess.WHITE else "white_wins"
+                    termination = "illegal_move"
+            else:
+                # Deadline: neither a move, control, nor abort → flag (D7 applies).
+                move_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await move_task
+                result, termination = _timeout_result(board, color)
+
+        if result is not None:
             break
 
         clock.charge(color, (loop.time() - t0) * 1000)
@@ -189,6 +243,12 @@ async def run_game(
         board.push(move)
         clock.credit_increment(color, inc_ms)  # 0 at MVP
         live.applied[ply] = uci
+        # Draw-offer lifecycle (D6): a move by this side implicitly declines a
+        # standing offer against it; a piggybacked offer then becomes the new one.
+        if live.pending_draw_offer == _other(name):
+            live.pending_draw_offer = None
+        if getattr(seat, "_offer_draw", False):
+            live.pending_draw_offer = name
         await seat.confirm_move(ply)
         live.last_move = {"uci": uci, "san": san}
         await pubsub.publish(
@@ -205,7 +265,10 @@ async def run_game(
         )
         live.ply = ply + 1
 
-        outcome = board.outcome()  # automatic terminals (no claim); auto-draws are V5
+        # Auto-draws with no claim protocol (ADR-0016 D8): claim_draw=True makes
+        # the server auto-claim threefold/fifty-move as well as the always-on
+        # stalemate/insufficient/fivefold/75-move terminals.
+        outcome = board.outcome(claim_draw=True)
         if outcome is not None:
             result, termination = _outcome_to_result(outcome)
             break
@@ -225,10 +288,21 @@ async def run_game(
         final_fen,
         pgn,
     )
+    outcome = None
     if finalizer is not None:
-        await finalizer(game, result, termination, final_fen, pgn)
+        outcome = await finalizer(game, result, termination, final_fen, pgn)
     for seat in seats.values():
-        await seat.game_over(result=result, termination=termination, final_fen=final_fen, pgn=pgn)
+        before = after = None
+        if outcome is not None:
+            before, after = outcome.white if seat.color == "white" else outcome.black
+        await seat.game_over(
+            result=result,
+            termination=termination,
+            final_fen=final_fen,
+            pgn=pgn,
+            rating_before=before,
+            rating_after=after,
+        )
     await pubsub.publish(
         channel,
         {
