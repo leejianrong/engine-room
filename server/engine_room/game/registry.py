@@ -50,6 +50,12 @@ class GameRegistry:
             g for g in self._games.values() if g.state in ("paired", "in_progress")
         ]
 
+    def remove(self, game_id: str) -> None:
+        """Drop a game from the in-memory map. Used to evict finished ambient
+        games (V6 D-g) so `_games` stays bounded under the endless house-vs-house
+        stream; their durable record + replay live in Postgres."""
+        self._games.pop(game_id, None)
+
     # --- V4 active-game index (real, session-backed seats only) ---------------
 
     def bind_active(self, game: Game) -> None:

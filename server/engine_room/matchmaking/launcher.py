@@ -55,8 +55,10 @@ class GameLauncher:
         # Strong refs to in-flight game tasks so they aren't garbage-collected.
         self._tasks: set[asyncio.Task] = set()
 
-    async def launch(self, game: Game) -> None:
-        """Notify both bots, then start the game loop as a background task.
+    async def launch(self, game: Game) -> "asyncio.Task":
+        """Notify both bots, then start the game loop as a background task; return
+        the task (so a caller like the ambient supervisor can await the game's end
+        to refill — V6 D-g).
 
         Seats + live state are attached and the game is bound to the active-game
         index (V4) BEFORE `game_start` is sent, so a reconnect that races the
@@ -80,3 +82,4 @@ class GameLauncher:
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+        return task

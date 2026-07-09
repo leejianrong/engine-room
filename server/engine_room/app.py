@@ -16,7 +16,13 @@ from .auth.schemas import UserRead, UserUpdate
 from .bots.authenticator import NullAuthenticator, PostgresBotAuthenticator
 from .bots.routes import router as bots_router
 from .config import settings
-from .game.house_bots import RandomBot
+from .game.ambient import AmbientSupervisor, parse_pool
+from .game.house_bots import (
+    HOUSE_RANDOM_2_ID,
+    HOUSE_RANDOM_2_NAME,
+    HOUSE_RANDOM_2_RATING,
+    RandomBot,
+)
 from .game.registry import GameRegistry
 from .matchmaking.elo import Windowing
 from .matchmaking.launcher import GameLauncher
@@ -35,9 +41,14 @@ from .ws.session_registry import SessionRegistry
 async def _lifespan(app: FastAPI):
     # Start/stop the background matchmaker loop (V3). No-op for AlwaysPairQueue.
     await app.state.matchmaking_queue.start()
+    # Start/stop the ambient house-vs-house feeder (V6). None when disabled.
+    if app.state.ambient_supervisor is not None:
+        await app.state.ambient_supervisor.start()
     try:
         yield
     finally:
+        if app.state.ambient_supervisor is not None:
+            await app.state.ambient_supervisor.stop()
         await app.state.matchmaking_queue.stop()
 
 
@@ -70,6 +81,8 @@ def create_app(
     bot_authenticator=None,
     *,
     game_reader=None,
+    ambient_games: int = 0,
+    ambient_move_delay_seconds: float | None = None,
     always_pair: bool = False,
     matcher_kwargs: dict | None = None,
     hb_kwargs: dict | None = None,
@@ -83,6 +96,13 @@ def create_app(
     (ADR-0014). Left None it defaults to a NullAuthenticator (rejects all — no
     accidental auth bypass); the production entrypoint wires PostgresBotAuthenticator
     and WS-seam tests inject an in-memory fake.
+
+    `game_reader` is the spectator read side (lobby recently-finished + finished-
+    game replay). Left None the endpoints serve the in-memory registry only.
+    `ambient_games` (V6) is how many house-vs-house games the ambient supervisor
+    keeps live so the lobby is never empty; 0 (default) disables it, production
+    opts in via `settings.ambient_games`, and tests pass a value + tiny
+    `ambient_move_delay_seconds` to exercise it deterministically.
 
     `always_pair` swaps the V3 Elo matcher for V1's synchronous always-pair-vs-
     house queue — used by game-loop/spectate tests that just need an instant game
@@ -116,6 +136,36 @@ def create_app(
         finalizer=finalizer,
         house_move_delay=settings.house_move_delay_seconds,
     )
+    # V6 ambient house-vs-house feeder (ADR-0022 Kind-1): keeps `ambient_games`
+    # games live so the lobby is never empty. Off by default (0) — production opts
+    # in via settings; tests set a value explicitly. Uses its own launcher with an
+    # ambient move delay so the games are watchable independent of the greeter's
+    # house pacing. Launched with the same finalizer → rated + persisted (Q4).
+    app.state.house_bot_2 = RandomBot(
+        id=HOUSE_RANDOM_2_ID, name=HOUSE_RANDOM_2_NAME, rating=HOUSE_RANDOM_2_RATING
+    )
+    if ambient_games > 0:
+        delay = (
+            ambient_move_delay_seconds
+            if ambient_move_delay_seconds is not None
+            else settings.ambient_move_delay_seconds
+        )
+        ambient_launcher = GameLauncher(
+            app.state.pubsub,
+            game_registry=app.state.game_registry,
+            finalizer=finalizer,
+            house_move_delay=delay,
+        )
+        app.state.ambient_supervisor = AmbientSupervisor(
+            app.state.game_registry,
+            ambient_launcher,
+            app.state.house_bot,
+            app.state.house_bot_2,
+            n=ambient_games,
+            time_control=parse_pool(settings.ambient_pool),
+        )
+    else:
+        app.state.ambient_supervisor = None
     # V6 spectator read side (lobby recently-finished + finished-game replay).
     # DI mirrors the finalizer: None (fast tests) → endpoints serve the in-memory
     # registry only; production wires PostgresGameReader.
@@ -173,4 +223,5 @@ app = create_app(
     finalizer=PostgresFinalizer(),
     bot_authenticator=PostgresBotAuthenticator(),
     game_reader=PostgresGameReader(),
+    ambient_games=settings.ambient_games,
 )

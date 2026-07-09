@@ -74,8 +74,19 @@ class PostgresFinalizer:
 
                 # ABORTED games have no fair result → no rating (ADR-0010/0011).
                 if result != "aborted":
-                    white = await session.get(BotRow, game.white.bot.id)
-                    black = await session.get(BotRow, game.black.bot.id)
+                    # Row-lock the bot rows (V6 D-g2): ambient house-vs-house games
+                    # (ADR-0022 Kind-1) share the two house identities and finish
+                    # often, so two finalize txns can touch the same `bots` row
+                    # concurrently — FOR UPDATE serializes the read-modify-write so
+                    # neither rating update is lost. Lock in a fixed id order so two
+                    # txns over the same pair can't deadlock.
+                    locked: dict[str, object] = {}
+                    for bot_id in sorted({game.white.bot.id, game.black.bot.id}):
+                        locked[bot_id] = await session.get(
+                            BotRow, bot_id, with_for_update=True
+                        )
+                    white = locked[game.white.bot.id]
+                    black = locked[game.black.bot.id]
                     if white is not None and black is not None:
                         w0, b0 = white.rating, black.rating
                         wc, bc = ratings.scores(result)
