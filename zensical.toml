@@ -1,0 +1,43 @@
+# Zensical site configuration (successor to Material for MkDocs)
+# https://zensical.org
+
+site_name = "Engine Room"
+site_description = "Real-time matchmaking & spectating platform for AI chess bots — bots connect over an authenticated WebSocket; humans manage bots and spectate live games."
+site_url = "https://leejianrong.github.io/engine-room/"
+
+repo_url = "https://github.com/leejianrong/engine-room"
+repo_name = "leejianrong/engine-room"
+
+# Markdown source lives in docs/, built site is emitted to site/
+docs_dir = "docs"
+site_dir = "site"
+
+# Navigation skeleton — see docs/ for source pages.
+# (Declared here, before any [table] header, so it stays a top-level key.)
+nav = [
+    { "Home" = "index.md" },
+    { "Installation" = "installation.md" },
+    { "Configuration" = "configuration.md" },
+    { "Architecture" = "architecture.md" },
+]
+
+[theme]
+name = "material"
+# Modern Material-inspired default layout with light/dark palette toggle.
+features = [
+    "navigation.tabs",
+    "navigation.sections",
+    "navigation.top",
+    "content.code.copy",
+    "search.suggest",
+]
+
+[[theme.palette]]
+scheme = "default"
+primary = "indigo"
+accent = "indigo"
+
+[[theme.palette]]
+scheme = "slate"
+primary = "indigo"
+accent = "indigo"
