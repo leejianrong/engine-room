@@ -42,6 +42,20 @@ class GameRegistry:
     def get(self, game_id: str) -> Optional[Game]:
         return self._games.get(game_id)
 
+    def list_active(self) -> list[Game]:
+        """All live games (PAIRED or IN_PROGRESS) for the spectator lobby (V6
+        D-e). Terminal games are excluded here — the lobby's recently-finished
+        list comes from Postgres (durable, survives restart)."""
+        return [
+            g for g in self._games.values() if g.state in ("paired", "in_progress")
+        ]
+
+    def remove(self, game_id: str) -> None:
+        """Drop a game from the in-memory map. Used to evict finished ambient
+        games (V6 D-g) so `_games` stays bounded under the endless house-vs-house
+        stream; their durable record + replay live in Postgres."""
+        self._games.pop(game_id, None)
+
     # --- V4 active-game index (real, session-backed seats only) ---------------
 
     def bind_active(self, game: Game) -> None:

@@ -68,3 +68,7 @@ down: ## Stop and remove all local containers
 test: ## Fast gate: ruff + unit tests + svelte-check
 	cd server && uv run ruff check . && uv run pytest tests/unit -q
 	cd frontend && npm run check
+
+e2e: migrate ## Playwright smoke: dashboard → watch → replay (starts backend+frontend itself)
+	cd frontend && npm ci && npx playwright install chromium && \
+		ER_AMBIENT_MOVE_DELAY_SECONDS=0.15 npm run e2e

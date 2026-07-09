@@ -140,6 +140,17 @@ class Settings(BaseSettings):
     elo_k_default: int = 16
     elo_provisional_games: int = 30
 
+    # --- V6 spectator UX (slice A6, ADR-0015/0022) ---
+    # Lobby: how many recently-finished games GET /api/games returns from Postgres
+    # (newest first), alongside all active games from the in-memory registry (D-e).
+    lobby_finished_limit: int = 20
+    # Ambient house-vs-house games (ADR-0022 Kind-1) kept live so the lobby is
+    # never empty. 0 disables (CI/unit default via create_app). Rated + persisted
+    # via the normal launcher (V6 Q4). Move delay makes them watchable.
+    ambient_games: int = 2
+    ambient_move_delay_seconds: float = 1.0
+    ambient_pool: str = "180+0"  # "<base>+<increment>" seconds — 3+0
+
     # Artificial pause before the in-process house bot replies. Default 0 (instant,
     # no production impact); local dev sets ~0.5s so house games are watchable move
     # by move. Charged to the house's own clock — safe on a Blitz clock.

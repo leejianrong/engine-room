@@ -93,6 +93,15 @@ def _reset_tables():                    # deterministic ticket numbers between t
 
 ### 1b. E2E tests with Playwright (Playwright boots the whole stack)
 
+> **As built (V6):** the concrete instance is `frontend/e2e/smoke.spec.ts` — one spectator smoke
+> (dashboard → watch a live ambient game → replay to move 1). `frontend/playwright.config.ts`'s
+> `webServer` starts the **backend** (`cd ../server && uv run uvicorn engine_room.app:app --port
+> 8001`, ambient bots ON) and the built **preview** (`npm run build && npm run preview` on 5174);
+> the DB is started + migrated first by `make e2e` / the CI `e2e` job. Run it with `npm run e2e`.
+> The card-CRUD / `helpers.ts` patterns below are illustrative of the portable playbook (reusable
+> for a future bot-management UI); the V6 spectator smoke is anonymous + read-only, so it creates no
+> data and needs no cleanup.
+
 `frontend/playwright.config.ts` uses the `webServer` feature so Playwright itself starts the
 backend and frontend — you don't manage processes by hand:
 

@@ -61,3 +61,51 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest # Playwright smoke: dashboard → watch → replay (V6 / ADR-0023)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: engine_room
+          POSTGRES_PASSWORD: engine_room
+          POSTGRES_DB: engine_room
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Migrate database
+        working-directory: server
+        run: uv run --frozen alembic upgrade head
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run e2e smoke
+        working-directory: frontend
+        run: npm run e2e
+        env:
+          ER_AMBIENT_GAMES: "2"
+          ER_AMBIENT_MOVE_DELAY_SECONDS: "0.15"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

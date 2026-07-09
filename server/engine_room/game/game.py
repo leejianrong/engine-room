@@ -54,6 +54,12 @@ class LiveState:
     # Surfaced to the OTHER side via your_turn.opponent_draw_offer; cleared when
     # the recipient makes a move (implicit decline, ADR-0016 D6). V5.
     pending_draw_offer: Optional[str] = None
+    # Ordered move history [{ply,uci,san,fen}], one entry per applied half-move
+    # (the loop appends after each push). The catch-up snapshot + replay source
+    # (V6 D-c): SAN + per-ply FEN, which `applied` (ply->uci) lacks. Mirrors the
+    # fields the spectator `move` event already carries, so snapshot-moves + the
+    # live tail form one uniform client-side list.
+    moves: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -122,4 +128,42 @@ class Game:
                 live.pending_draw_offer is not None and live.pending_draw_offer != color
             ),
             "to_move": "white" if board.turn == chess.WHITE else "black",
+        }
+
+    def spectator_snapshot(self) -> Optional[dict]:
+        """The catch-up snapshot a spectator receives as the FIRST SSE event on a
+        mid-game join (V6 D-a/D-b): the current board + clocks + players + the
+        full move-list-so-far, so the client can render immediately and replay
+        from move 1. Sibling to `resume_payload` but spectator-facing (identity-
+        neutral, no draw-offer detail). None if there is no live state yet (a
+        just-created PAIRED game before the loop's first tick — the client then
+        falls back to `game_start` from the live tail)."""
+        if self.live is None:
+            return None
+        live = self.live
+        board = live.board
+        return {
+            "type": "snapshot",
+            "game_id": self.id,
+            "state": self.state,
+            "white": {"name": self.white.bot.name, "rating": self.white.bot.rating},
+            "black": {"name": self.black.bot.name, "rating": self.black.bot.rating},
+            "time_control": {
+                "base_seconds": self.time_control.base_seconds,
+                "increment_seconds": self.time_control.increment_seconds,
+            },
+            "initial_fen": self.initial_fen,
+            "fen": board.fen(),
+            "ply": live.ply,
+            "to_move": "white" if board.turn == chess.WHITE else "black",
+            "last_move": live.last_move,
+            "clocks": {
+                "white_ms": live.clock.remaining_ms(chess.WHITE),
+                "black_ms": live.clock.remaining_ms(chess.BLACK),
+            },
+            "moves": list(live.moves),
+            # Present only for a terminal game still in memory (so an SSE join to
+            # a just-finished game gets the outcome + can stop waiting for a tail).
+            "result": self.result,
+            "termination": self.termination,
         }

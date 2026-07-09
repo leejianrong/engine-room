@@ -1,9 +1,9 @@
 # Workflow adoption — status
 
 Tracks how much of [DEVELOPER-WORKFLOWS.md](DEVELOPER-WORKFLOWS.md) (the portable playbook)
-engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2.**
-Server-enforced branch protection is intentionally skipped (private repo — see divergences);
-Playwright + deploy still deferred.
+engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2; Playwright
+browser e2e adopted at V6.** Server-enforced branch protection is intentionally skipped (private
+repo — see divergences).
 
 ## Adopted (Phases A–C, 2026-07-08)
 
@@ -24,13 +24,17 @@ Test counts today: **41 unit + 17 integration = 58**, ruff clean (V2).
 |---------------|------|
 | **Branch-per-slice + PR-only merges** (§6) | V2 built on `feat/v2-identity`, small per-sub-step commits, opened as **PR #1**; CI gates the merge. This is the standing convention from V2 on (CLAUDE.md "Workflow conventions"). |
 
+## Adopted at V6 (Phase D — browser e2e)
+
+| Playbook item | Here |
+|---------------|------|
+| **Playwright browser e2e** (§1b) | `frontend/playwright.config.ts` (`webServer` starts the backend + built preview) + `frontend/e2e/smoke.spec.ts` (the ADR-0023 demo path: dashboard → watch a live ambient game → replay to move 1). `make e2e` locally; CI `e2e` job with a Postgres **service container** + a cached Chromium. One smoke for now — a broader suite (owner flows, error paths) is later. |
+
 ## Deferred to Phase D
 
 | Item | Why not yet | Trigger to do it |
 |------|-------------|------------------|
-| **Real migrations in the integration fixture** (§1a) | The `session_factory` fixture builds the schema with `create_all`, not the Alembic chain; `0002`'s SQL is validated separately by `test_v2_migrations` on a fresh container. **Revisit: switch the fixture to `alembic upgrade head`** so every integration test also exercises the migrations (and drift can't hide). | Do it when convenient (good early-V3 chore); the env.py `sqlalchemy.url` hook already added for the migration test makes this straightforward. |
-| **Playwright browser e2e** (§1b) | Heaviest item; the live-server SSE test already covers the data path end-to-end. The gap is pixel-level DOM rendering. | When a UI regression needs guarding (V6 dashboard). |
-| **Deploy gated on CI** (§5) | Hosting target undecided — **QUESTIONS.md K3** still open. The playbook deploys to Fly.io. | When K3 is decided. |
+| **Real migrations in the integration fixture** (§1a) | The `session_factory` fixture builds the schema with `create_all`, not the Alembic chain; the migration SQL is validated separately by `test_v2_migrations` on a fresh container. **Revisit: switch the fixture to `alembic upgrade head`** so every integration test also exercises the migrations (and drift can't hide). | Do it when convenient; the env.py `sqlalchemy.url` hook already added for the migration test makes this straightforward. |
 
 ## Deliberate divergences from the playbook
 

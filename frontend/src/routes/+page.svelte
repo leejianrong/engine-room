@@ -1,218 +1,201 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { fetchLobby, fmtResult, fmtTimeControl, type LobbyEntry } from '$lib/api';
 
-	// Backend base URL (cross-origin; CORS-enabled on the server).
-	// Override with VITE_API_BASE for non-default hosts.
-	const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8001';
+	let games = $state<LobbyEntry[]>([]);
+	let error = $state('');
+	let loaded = $state(false);
 
-	type Player = { name: string; rating: number };
-	type Move = { ply: number; san: string; uci: string };
+	const active = $derived(games.filter((g) => g.state === 'paired' || g.state === 'in_progress'));
+	const finished = $derived(games.filter((g) => g.state === 'finished' || g.state === 'aborted'));
 
-	const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-
-	let gameId = $state('');
-	let status = $state('idle');
-	let white = $state<Player | null>(null);
-	let black = $state<Player | null>(null);
-	let fen = $state(START_FEN);
-	let moves = $state<Move[]>([]);
-	let clocks = $state<{ white_ms: number; black_ms: number } | null>(null);
-	let toMove = $state<'white' | 'black'>('white');
-	let es: EventSource | null = null;
-
-	const GLYPH: Record<string, string> = {
-		K: '♔', Q: '♕', R: '♖', B: '♗', N: '♘', P: '♙',
-		k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟'
-	};
-
-	function fenToGrid(f: string): string[][] {
-		return f.split(' ')[0].split('/').map((row) => {
-			const cells: string[] = [];
-			for (const ch of row) {
-				if (/\d/.test(ch)) for (let i = 0; i < parseInt(ch); i++) cells.push('');
-				else cells.push(ch);
-			}
-			return cells;
-		});
+	async function poll() {
+		try {
+			games = await fetchLobby();
+			error = '';
+		} catch (e) {
+			error = String(e);
+		} finally {
+			loaded = true;
+		}
 	}
 
-	function fmtClock(ms: number): string {
-		const s = Math.max(0, Math.floor(ms / 1000));
-		return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-	}
-
-	const grid = $derived(fenToGrid(fen));
-
-	function disconnect() {
-		es?.close();
-		es = null;
-	}
-
-	function connect() {
-		if (!gameId) return;
-		disconnect();
-		moves = [];
-		white = black = null;
-		fen = START_FEN;
-		status = 'connecting…';
-		es = new EventSource(`${API_BASE}/api/spectate/${gameId}`);
-		es.onopen = () => (status = 'watching');
-		es.onmessage = (e) => {
-			const ev = JSON.parse(e.data);
-			if (ev.type === 'game_start') {
-				white = ev.white;
-				black = ev.black;
-				fen = ev.initial_fen;
-				clocks = ev.clocks;
-				toMove = 'white';
-			} else if (ev.type === 'move') {
-				fen = ev.fen;
-				clocks = ev.clocks;
-				toMove = ev.to_move;
-				moves = [...moves, { ply: ev.ply, san: ev.san, uci: ev.uci }];
-			} else if (ev.type === 'game_over') {
-				fen = ev.final_fen;
-				status = `game over — ${ev.result} · ${ev.termination}`;
-				disconnect();
-			}
-		};
-		es.onerror = () => {
-			if (es && es.readyState === EventSource.CLOSED) status = 'disconnected';
-		};
+	function watchHref(g: LobbyEntry): string {
+		const done = g.state === 'finished' || g.state === 'aborted';
+		return `/watch?game=${g.game_id}${done ? '&finished=1' : ''}`;
 	}
 
 	onMount(() => {
-		const g = new URLSearchParams(window.location.search).get('game');
-		if (g) {
-			gameId = g;
-			connect();
-		}
-		return disconnect;
+		poll();
+		const id = setInterval(poll, 3000);
+		return () => clearInterval(id);
 	});
 </script>
 
-<svelte:head><title>Engine Room</title></svelte:head>
+<svelte:head><title>Engine Room — Lobby</title></svelte:head>
 
 <main>
-	<h1>Engine Room</h1>
+	<header>
+		<h1>Engine Room</h1>
+		<p class="tag">Live AI chess — click a game to watch.</p>
+	</header>
 
-	<form
-		class="watch"
-		onsubmit={(e) => {
-			e.preventDefault();
-			connect();
-		}}
-	>
-		<input placeholder="game id (e.g. game_…)" bind:value={gameId} />
-		<button type="submit">Watch</button>
-		<span class="status">{status}</span>
-	</form>
+	{#if error}
+		<p class="error">Couldn’t reach the server: {error}</p>
+	{/if}
 
-	<div class="game">
-		<div class="board">
-			{#each grid as row, r}
-				{#each row as piece, c}
-					<div class="sq {(r + c) % 2 === 0 ? 'light' : 'dark'}">{piece ? GLYPH[piece] : ''}</div>
+	<section>
+		<h2>Live games <span class="count">{active.length}</span></h2>
+		{#if active.length}
+			<ul class="grid">
+				{#each active as g (g.game_id)}
+					<li>
+						<a class="card" href={watchHref(g)}>
+							<div class="row">
+								<span class="name" class:turn={g.to_move === 'white'}>{g.white.name}</span>
+								<span class="rating">{g.white.rating ?? '—'}</span>
+							</div>
+							<div class="row">
+								<span class="name" class:turn={g.to_move === 'black'}>{g.black.name}</span>
+								<span class="rating">{g.black.rating ?? '—'}</span>
+							</div>
+							<div class="meta">
+								<span class="tc">{fmtTimeControl(g.time_control)}</span>
+								<span class="live">● move {g.ply ?? 0}</span>
+							</div>
+						</a>
+					</li>
 				{/each}
-			{/each}
-		</div>
+			</ul>
+		{:else if loaded}
+			<p class="empty">No live games right now.</p>
+		{:else}
+			<p class="empty">Loading…</p>
+		{/if}
+	</section>
 
-		<aside>
-			<div class="players">
-				<div class="player" class:active={toMove === 'black'}>
-					<strong>{black?.name ?? 'Black'}</strong>
-					<span>{black ? black.rating : ''}</span>
-					<span class="clock">{clocks ? fmtClock(clocks.black_ms) : ''}</span>
-				</div>
-				<div class="player" class:active={toMove === 'white'}>
-					<strong>{white?.name ?? 'White'}</strong>
-					<span>{white ? white.rating : ''}</span>
-					<span class="clock">{clocks ? fmtClock(clocks.white_ms) : ''}</span>
-				</div>
-			</div>
-
-			<ol class="moves">
-				{#each moves as m}
-					<li>{m.san}</li>
+	{#if finished.length}
+		<section>
+			<h2>Recently finished</h2>
+			<ul class="grid">
+				{#each finished as g (g.game_id)}
+					<li>
+						<a class="card done" href={watchHref(g)}>
+							<div class="row">
+								<span class="name">{g.white.name}</span>
+								<span class="rating">{g.white.rating ?? '—'}</span>
+							</div>
+							<div class="row">
+								<span class="name">{g.black.name}</span>
+								<span class="rating">{g.black.rating ?? '—'}</span>
+							</div>
+							<div class="meta">
+								<span class="tc">{fmtTimeControl(g.time_control)}</span>
+								<span class="result">{fmtResult(g.result, g.termination)}</span>
+							</div>
+						</a>
+					</li>
 				{/each}
-			</ol>
-		</aside>
-	</div>
+			</ul>
+		</section>
+	{/if}
 </main>
 
 <style>
 	main {
 		font-family: system-ui, sans-serif;
-		max-width: 46rem;
+		max-width: 60rem;
 		margin: 2rem auto;
 		padding: 0 1rem;
 	}
-	h1 {
-		margin-bottom: 0.5rem;
+	header h1 {
+		margin: 0;
 	}
-	.watch {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-		margin-bottom: 1rem;
+	.tag {
+		color: #888;
+		margin: 0.2rem 0 1.5rem;
 	}
-	.watch input {
-		flex: 1;
-		padding: 0.4rem 0.5rem;
-		font: inherit;
+	h2 {
+		font-size: 1rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #888;
+		border-bottom: 1px solid var(--line, #e2e2e2);
+		padding-bottom: 0.3rem;
 	}
-	.status {
-		color: #666;
-		font-size: 0.9rem;
-		white-space: nowrap;
+	.count {
+		color: #779556;
 	}
-	.game {
-		display: flex;
-		gap: 1.5rem;
-		flex-wrap: wrap;
-	}
-	.board {
+	.grid {
+		list-style: none;
+		padding: 0;
 		display: grid;
-		grid-template-columns: repeat(8, 3rem);
-		grid-template-rows: repeat(8, 3rem);
-		border: 2px solid #333;
+		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+		gap: 0.75rem;
 	}
-	.sq {
+	.card {
+		display: block;
+		text-decoration: none;
+		color: inherit;
+		border: 1px solid var(--line, #e2e2e2);
+		border-radius: 8px;
+		padding: 0.75rem 0.9rem;
+		transition: border-color 0.15s, transform 0.05s;
+	}
+	.card:hover {
+		border-color: #779556;
+		transform: translateY(-1px);
+	}
+	.card.done {
+		opacity: 0.85;
+	}
+	.row {
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 2rem;
-		line-height: 1;
-	}
-	.light {
-		background: #f0d9b5;
-	}
-	.dark {
-		background: #b58863;
-	}
-	aside {
-		min-width: 12rem;
-		flex: 1;
-	}
-	.player {
-		display: flex;
-		gap: 0.5rem;
+		justify-content: space-between;
 		align-items: baseline;
-		padding: 0.4rem 0.5rem;
-		border-radius: 4px;
+		gap: 0.5rem;
 	}
-	.player.active {
-		background: #fff3cd;
+	.name {
+		font-weight: 600;
 	}
-	.player .clock {
-		margin-left: auto;
+	.name.turn::before {
+		content: '▸ ';
+		color: #779556;
+	}
+	.rating {
+		color: #888;
 		font-variant-numeric: tabular-nums;
 	}
-	.moves {
-		margin-top: 1rem;
-		max-height: 18rem;
-		overflow-y: auto;
-		columns: 2;
+	.meta {
+		display: flex;
+		justify-content: space-between;
+		margin-top: 0.5rem;
+		font-size: 0.82rem;
+		color: #888;
+	}
+	.tc {
 		font-variant-numeric: tabular-nums;
+	}
+	.live {
+		color: #779556;
+	}
+	.empty,
+	.error {
+		color: #888;
+	}
+	.error {
+		color: #b33;
+	}
+	:global(:root) {
+		color-scheme: light dark;
+	}
+	@media (prefers-color-scheme: dark) {
+		.card {
+			--line: #333;
+			background: #1a1a1a;
+		}
+		h2 {
+			--line: #333;
+		}
 	}
 </style>

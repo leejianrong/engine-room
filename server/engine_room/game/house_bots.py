@@ -19,6 +19,13 @@ HOUSE_RANDOM_ID = "bot_house_random"
 HOUSE_RANDOM_NAME = "house-random"
 HOUSE_RANDOM_RATING = 1200
 
+# A second house identity (ADR-0022 Kind-1 / V6 D-h): needed so ambient
+# house-vs-house games have two distinct rated, persisted bots. Same random
+# mover; seeded as a `bots` row by Alembic 0004 (and seed_house_bots).
+HOUSE_RANDOM_2_ID = "bot_house_random_2"
+HOUSE_RANDOM_2_NAME = "house-random-2"
+HOUSE_RANDOM_2_RATING = 1200
+
 
 class RandomBot:
     """Picks a uniformly-random legal move."""
