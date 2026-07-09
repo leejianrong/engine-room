@@ -12,9 +12,10 @@ from sqlalchemy import func, select
 
 from engine_room.game.ambient import AmbientSupervisor
 from engine_room.game.house_bots import (
-    HOUSE_RANDOM_2_ID,
-    HOUSE_RANDOM_2_NAME,
-    HOUSE_RANDOM_ID,
+    JIAN_001_ID,
+    JIAN_001_NAME,
+    JIAN_002_ID,
+    JIAN_002_NAME,
     RandomBot,
 )
 from engine_room.game.registry import GameRegistry
@@ -45,8 +46,8 @@ async def test_ambient_games_persist_rate_and_respawn(session_factory):
         finalizer=PostgresFinalizer(session_factory),
         house_move_delay=0.0,  # instant so games finish fast in the test
     )
-    house_a = RandomBot()  # bot_house_random (white)
-    house_b = RandomBot(id=HOUSE_RANDOM_2_ID, name=HOUSE_RANDOM_2_NAME)  # black
+    house_a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)  # jian-bot-001 (white)
+    house_b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)  # jian-bot-002 (black)
     sup = AmbientSupervisor(
         registry, launcher, house_a, house_b, n=2, time_control=TimeControl(base_seconds=180)
     )
@@ -70,13 +71,13 @@ async def test_ambient_games_persist_rate_and_respawn(session_factory):
             await session.execute(select(func.count()).select_from(GameRow))
         ).scalar_one()
         rows = (await session.execute(select(GameRow))).scalars().all()
-        a = await session.get(Bot, HOUSE_RANDOM_ID)
-        b = await session.get(Bot, HOUSE_RANDOM_2_ID)
+        a = await session.get(Bot, JIAN_001_ID)
+        b = await session.get(Bot, JIAN_002_ID)
 
     # Every persisted ambient game is house_a (white) vs house_b (black), rated.
     for row in rows:
-        assert row.white_bot_id == HOUSE_RANDOM_ID
-        assert row.black_bot_id == HOUSE_RANDOM_2_ID
+        assert row.white_bot_id == JIAN_001_ID
+        assert row.black_bot_id == JIAN_002_ID
         assert row.white_rating_before is not None
         assert row.white_rating_after is not None
 

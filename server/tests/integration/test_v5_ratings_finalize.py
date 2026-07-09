@@ -14,7 +14,7 @@ import chess
 
 from engine_room.game.clock import Clock
 from engine_room.game.game import LiveState, Participant
-from engine_room.game.house_bots import HOUSE_RANDOM_ID, RandomBot
+from engine_room.game.house_bots import EPHRAIM_ID, RandomBot
 from engine_room.game.registry import GameRegistry
 from engine_room.game.worker import run_game
 from engine_room.persistence.finalize import PostgresFinalizer
@@ -46,7 +46,7 @@ class _BlockingSeat:
 
 async def _seed(session_factory):
     async with session_factory() as session:
-        await seed_house_bots(session)  # bot_house_random @ 1200, games_played 0
+        await seed_house_bots(session)  # bot_ephraim @ 1200, games_played 0
         session.add(
             Bot(
                 id="bot_user1",
@@ -62,7 +62,7 @@ async def _seed(session_factory):
 
 def _scripted_game(registry: GameRegistry):
     white = RandomBot(id="bot_user1", name="alice")
-    black = RandomBot()  # canonical house bot
+    black = RandomBot()  # canonical house bot (ephraim)
     game = registry.create_game(
         white=Participant(bot=white.info, is_house=True, house=white),
         black=Participant(bot=black.info, is_house=True, house=black),
@@ -88,7 +88,7 @@ async def test_decisive_game_moves_ratings_in_one_txn(session_factory):
 
     async with session_factory() as session:
         alice = await session.get(Bot, "bot_user1")
-        house = await session.get(Bot, HOUSE_RANDOM_ID)
+        house = await session.get(Bot, EPHRAIM_ID)
         row = await session.get(GameRow, game.id)
 
     # 1200 vs 1200, provisional K=32: loser 1200-16=1184, winner 1200+16=1216.
@@ -115,7 +115,7 @@ async def test_aborted_game_writes_no_rating(session_factory):
 
     async with session_factory() as session:
         alice = await session.get(Bot, "bot_user1")
-        house = await session.get(Bot, HOUSE_RANDOM_ID)
+        house = await session.get(Bot, EPHRAIM_ID)
         row = await session.get(GameRow, game.id)
 
     assert (alice.rating, alice.games_played) == (1200, 0)  # unchanged

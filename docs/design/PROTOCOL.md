@@ -83,7 +83,7 @@ open WS (Authorization: Bearer <key>)
   "type": "game_start",
   "game_id": "game_abc",
   "your_color": "white",
-  "opponent": { "id": "bot_999", "name": "house-random", "rating": 1200 },
+  "opponent": { "id": "bot_ephraim", "name": "ephraim-bot", "rating": 1200 },
   "time_control": { "base_seconds": 180, "increment_seconds": 0 },
   "initial_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   "clocks": { "white_ms": 180000, "black_ms": 180000 },
@@ -232,7 +232,7 @@ C→ hello {protocol_version:"1.0"}
 S→ welcome {bot:{...}, active_game:null}
 C→ seek {id:"c1", time_control:{base_seconds:180, increment_seconds:0}}
 S→ seek_ack {id:"c1", seek_id:"seek_77", status:"queued"}
-S→ game_start {game_id:"g1", your_color:"white", opponent:{name:"house-random"}, initial_fen:"...", clocks:{180000,180000}, start_grace_ms:10000}
+S→ game_start {game_id:"g1", your_color:"white", opponent:{name:"ephraim-bot"}, initial_fen:"...", clocks:{180000,180000}, start_grace_ms:10000}
 S→ your_turn {game_id:"g1", ply:0, fen:"...", last_move:null, clocks:{180000,180000}}
 C→ move {id:"c2", game_id:"g1", ply:0, uci:"e2e4"}
 S→ move_ack {id:"c2", ply:0, accepted:true}

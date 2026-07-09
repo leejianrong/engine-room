@@ -5,7 +5,7 @@ clock, so every time-driven rule (widening, TTL, greeter solo-wait) is exact."""
 
 import pytest
 
-from engine_room.game.house_bots import HOUSE_RANDOM_ID, RandomBot
+from engine_room.game.house_bots import EPHRAIM_ID, RandomBot
 from engine_room.game.registry import GameRegistry
 from engine_room.matchmaking.elo import Windowing
 from engine_room.matchmaking.matcher import EloMatchmaker
@@ -153,7 +153,7 @@ async def test_greeter_fallback_after_solo_wait():
     game = launcher.launched[0]
     assert game.white.bot.id == "bot_a"
     assert game.black.is_house is True
-    assert game.black.bot.id == HOUSE_RANDOM_ID
+    assert game.black.bot.id == EPHRAIM_ID
 
 
 async def test_no_greeter_in_five_plus_zero():
