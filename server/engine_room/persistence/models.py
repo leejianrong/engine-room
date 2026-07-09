@@ -58,6 +58,10 @@ class Bot(Base):
     name: Mapped[str] = mapped_column(String(64))
     description: Mapped[str] = mapped_column(String(256), default="")
     rating: Mapped[int] = mapped_column(Integer, default=1200)  # US 8; moves in V5
+    # Rated games this bot has completed (FINISHED, not ABORTED). Drives the
+    # provisional K-factor (larger K for the first N games, ADR-0011). Added in V5
+    # (0003); counts from V5 onward — pre-V5 games are not backfilled (O-4).
+    games_played: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     is_house: Mapped[bool] = mapped_column(Boolean, default=False)
     # API key (populated at key generation/rotation, sub-step 4)
     key_hash: Mapped[str | None] = mapped_column(
@@ -91,5 +95,11 @@ class Game(Base):
     )
     white_name: Mapped[str] = mapped_column(String(64))  # snapshot at game time
     black_name: Mapped[str] = mapped_column(String(64))
+    # V5 (0003): per-color Elo before/after, written in the same finalize txn as
+    # the row (ADR-0025 #5). NULL for ABORTED games (no result → no rating).
+    white_rating_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    white_rating_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    black_rating_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    black_rating_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
