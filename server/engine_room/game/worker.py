@@ -308,16 +308,22 @@ async def run_game(
             rating_before=before,
             rating_after=after,
         )
-    await pubsub.publish(
-        channel,
-        {
-            "type": "game_over",
-            "game_id": game.id,
-            "result": result,
-            "termination": termination,
-            "final_fen": final_fen,
-        },
-    )
+    game_over_event = {
+        "type": "game_over",
+        "game_id": game.id,
+        "result": result,
+        "termination": termination,
+        "final_fen": final_fen,
+    }
+    # V6 (Q6/D-f): surface the persisted Elo change to spectators too, so the
+    # watch view can show "+8 / −8" at game end. Present only when the finalizer
+    # rated the game (omitted for ABORTED / unrated / DB-free path).
+    if outcome is not None:
+        game_over_event["rating"] = {
+            "white": {"before": outcome.white[0], "after": outcome.white[1]},
+            "black": {"before": outcome.black[0], "after": outcome.black[1]},
+        }
+    await pubsub.publish(channel, game_over_event)
     if registry is not None:
         registry.unbind_active(game)
     return result, termination
