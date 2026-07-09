@@ -251,6 +251,11 @@ async def run_game(
             live.pending_draw_offer = name
         await seat.confirm_move(ply)
         live.last_move = {"uci": uci, "san": san}
+        fen = board.fen()
+        # Append to the live move history — the catch-up snapshot + replay source
+        # (V6 D-c). Same four fields as the `move` event below, so snapshot-moves
+        # + the live tail form one uniform client-side list.
+        live.moves.append({"ply": ply, "uci": uci, "san": san, "fen": fen})
         await pubsub.publish(
             channel,
             {
@@ -258,7 +263,7 @@ async def run_game(
                 "ply": ply,
                 "uci": uci,
                 "san": san,
-                "fen": board.fen(),
+                "fen": fen,
                 "clocks": _clocks(clock).model_dump(),
                 "to_move": "white" if board.turn == chess.WHITE else "black",
             },
