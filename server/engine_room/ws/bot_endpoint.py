@@ -13,6 +13,9 @@ separate reconnect window). If the game ended while the bot was away, the missed
 `game_over` is delivered on reconnect (D-vi).
 """
 
+import asyncio
+import contextlib
+import time
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -23,6 +26,7 @@ from ..protocol.messages import (
     GameOver,
     Hello,
     Move,
+    Ping,
     Pong,
     ProtocolError,
     Rating,
@@ -36,6 +40,7 @@ from .session import Session
 
 if TYPE_CHECKING:
     from ..game.game import Game
+    from .session_registry import SessionRegistry
 
 router = APIRouter()
 
@@ -45,6 +50,32 @@ SUPPORTED_VERSIONS = {"1.0"}
 # WebSocket close codes
 _CLOSE_POLICY_VIOLATION = 1008
 _CLOSE_PROTOCOL_ERROR = 1002
+
+
+async def _heartbeat(session: Session, ping_interval: float, liveness_timeout: float) -> None:
+    """Ping this socket on an interval; if no `pong` arrives within the liveness
+    window, close it — turning a half-dead socket into a real disconnect (§10).
+    Used only so mutual abandonment can be detected; a lone bot is never forfeited
+    here (its clock governs, ADR-0025 #3)."""
+    while True:
+        await asyncio.sleep(ping_interval)
+        if time.monotonic() - session.last_pong > liveness_timeout:
+            with contextlib.suppress(Exception):
+                await session.ws.close()
+            return
+        with contextlib.suppress(Exception):
+            await session.send(Ping(t=int(time.monotonic() * 1000)))
+
+
+def _mutually_abandoned(game: "Game", session_registry: "SessionRegistry") -> bool:
+    """True only if EVERY seat is a real bot AND none has a live session (I7). A
+    house seat is always present, so a house game is never mutually abandoned."""
+    for participant in (game.white, game.black):
+        if participant.is_house:
+            return False
+        if session_registry.current(participant.bot.id) is not None:
+            return False
+    return True
 
 
 def _terminal_game_over(game: "Game", bot) -> GameOver:
@@ -152,6 +183,17 @@ async def bot_ws(websocket: WebSocket) -> None:
             await session.send(_terminal_game_over(terminal, session.bot))
             game_registry.clear_recent_terminal(session.bot.id)
 
+    # --- heartbeat: ping this socket on an interval; a missed liveness window
+    # closes it so a half-dead socket becomes a real disconnect (§10). ---
+    session.last_pong = time.monotonic()
+    hb_task = asyncio.create_task(
+        _heartbeat(
+            session,
+            websocket.app.state.hb_ping_interval_seconds,
+            websocket.app.state.hb_liveness_timeout_seconds,
+        )
+    )
+
     # --- main receive loop ---
     queue = websocket.app.state.matchmaking_queue
     try:
@@ -188,8 +230,8 @@ async def bot_ws(websocket: WebSocket) -> None:
                 else:
                     await seat.inbound.put(msg)
             elif isinstance(msg, Pong):
-                # Heartbeat reply (§10). Liveness tracking is wired in V4 s5.
-                pass
+                # Heartbeat reply (§10): the socket is alive.
+                session.last_pong = time.monotonic()
             elif isinstance(msg, Hello):
                 await session.send(
                     Error(code="INVALID_MESSAGE", message="already handshaken", fatal=False)
@@ -199,8 +241,24 @@ async def bot_ws(websocket: WebSocket) -> None:
                     Error(code="INVALID_MESSAGE", message="unhandled type", fatal=False)
                 )
     except WebSocketDisconnect:
-        # Reconnect / mid-game seat cleanup arrives in V4 (resilience).
+        # A drop mid-game is fine: the seat's inbox is durable and the clock keeps
+        # running (ADR-0025 #3). The bot reconnects, flags, or — if its opponent
+        # is also gone — the game aborts (below).
         pass
     finally:
+        hb_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await hb_task
         # Drop this session unless a newer one already replaced it (newest-wins).
         registry.remove_if_current(session)
+        # Mutual abandonment (§10 / I7): if this bot truly dropped (not replaced)
+        # while in a live game and its opponent is also gone, abort the game — no
+        # result, no rating. A single drop is NOT aborted (the clock governs).
+        if registry.current(session.bot.id) is None:
+            active = game_registry.active_game_for(session.bot.id)
+            if (
+                active is not None
+                and active.state == "in_progress"
+                and _mutually_abandoned(active, registry)
+            ):
+                active.abort.set()

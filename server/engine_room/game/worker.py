@@ -9,6 +9,7 @@ spectator fan-out (N7/N9) hook in at later sub-steps.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 import chess
@@ -134,27 +135,47 @@ async def run_game(
     )
 
     result = termination = None
+    # Wakes the loop when both seats are abandoned → ABORTED (I7). Kept across
+    # turns; cancelled after the loop.
+    abort_wait = asyncio.ensure_future(game.abort.wait())
 
     while True:
         color = board.turn
         seat = seats[color]
         ply = live.ply
         t0 = loop.time()
-        try:
-            uci = await asyncio.wait_for(
-                seat.request_move(
-                    board=board,
-                    ply=ply,
-                    last_move=live.last_move,
-                    clocks=_clocks(clock),
-                    applied=live.applied,
-                ),
-                timeout=clock.deadline_s(color),
+        move_task = asyncio.ensure_future(
+            seat.request_move(
+                board=board,
+                ply=ply,
+                last_move=live.last_move,
+                clocks=_clocks(clock),
+                applied=live.applied,
             )
-        except asyncio.TimeoutError:
+        )
+        done, _ = await asyncio.wait(
+            {move_task, abort_wait},
+            timeout=clock.deadline_s(color),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        if abort_wait in done:
+            # Both seats gone → abort with no result (ADR-0010/0016 I7).
+            move_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await move_task
+            result, termination = "aborted", "aborted"
+            break
+        if move_task not in done:
+            # Neither a move nor an abort within the deadline → flag on time.
+            move_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await move_task
             result = "black_wins" if color == chess.WHITE else "white_wins"
             termination = "timeout"
             break
+        try:
+            uci = move_task.result()
         except IllegalMoveForfeit:
             # Illegal/unparseable move on your turn = instant forfeit (ADR-0016 B7).
             result = "black_wins" if color == chess.WHITE else "white_wins"
@@ -189,7 +210,11 @@ async def run_game(
             result, termination = _outcome_to_result(outcome)
             break
 
-    game.state = "finished"
+    abort_wait.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await abort_wait
+
+    game.state = "aborted" if termination == "aborted" else "finished"
     final_fen = board.fen()
     pgn = _render_pgn(game, board)
     # Stash the terminal so a bot that missed game_over while away can be told on
