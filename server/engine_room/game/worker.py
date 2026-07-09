@@ -18,7 +18,7 @@ from ..channels import game_channel
 from ..protocol.messages import Clocks
 from .clock import Clock
 from .game import Game
-from .seat import HouseSeat, WsSeat
+from .seat import HouseSeat, IllegalMoveForfeit, WsSeat
 
 if TYPE_CHECKING:
     from ..pubsub.base import PubSub
@@ -114,6 +114,9 @@ async def run_game(
     ply = 0
     last_move = None
     result = termination = None
+    # ply -> uci already applied, so a blind resend at a past ply is re-acked
+    # (never re-applied) by the seat (PROTOCOL §9). Moves to game.live in V4 s3.
+    applied: dict[int, str] = {}
 
     while True:
         color = board.turn
@@ -121,12 +124,23 @@ async def run_game(
         t0 = loop.time()
         try:
             uci = await asyncio.wait_for(
-                seat.request_move(board=board, ply=ply, last_move=last_move, clocks=_clocks(clock)),
+                seat.request_move(
+                    board=board,
+                    ply=ply,
+                    last_move=last_move,
+                    clocks=_clocks(clock),
+                    applied=applied,
+                ),
                 timeout=clock.deadline_s(color),
             )
         except asyncio.TimeoutError:
             result = "black_wins" if color == chess.WHITE else "white_wins"
             termination = "timeout"
+            break
+        except IllegalMoveForfeit:
+            # Illegal/unparseable move on your turn = instant forfeit (ADR-0016 B7).
+            result = "black_wins" if color == chess.WHITE else "white_wins"
+            termination = "illegal_move"
             break
 
         clock.charge(color, (loop.time() - t0) * 1000)
@@ -135,6 +149,7 @@ async def run_game(
         san = board.san(move)
         board.push(move)
         clock.credit_increment(color, inc_ms)  # 0 at MVP
+        applied[ply] = uci
         await seat.confirm_move(ply)
         last_move = {"uci": uci, "san": san}
         await pubsub.publish(

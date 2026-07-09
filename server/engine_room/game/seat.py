@@ -5,13 +5,21 @@ move at the expected ply). A HouseSeat computes an in-process house-bot move.
 The loop (worker.py) treats them identically: request_move -> confirm_move,
 and game_over at the end.
 
-V1 note: an out-of-turn ply, unparseable move, or illegal move is reported and
-ignored (the clock keeps running); illegal-move *forfeit* is the V4 slice.
+V4 (resilience): the read loop is `ply`-idempotent (PROTOCOL §9) — a duplicate
+resend at an already-applied ply is re-acked (never re-applied), a stale
+conflicting resend is ignored (not penalized), and a future ply is rejected
+(INVALID_PLY). An illegal/unparseable move AT the current ply is now an instant
+**forfeit** (ADR-0016 B7) — raised as `IllegalMoveForfeit` for the loop to turn
+into game_over{termination:"illegal_move"} (V1 reported-and-ignored it). All
+outbound sends are best-effort: a dead/half-dead socket must never crash the
+game loop — the clock is the sole arbiter (ADR-0025 #3), so a bot whose frame
+couldn't be delivered simply reconnects or flags.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import TYPE_CHECKING, Optional
 
 import chess
@@ -31,6 +39,16 @@ if TYPE_CHECKING:
     from .house_bots import RandomBot
 
 
+class IllegalMoveForfeit(Exception):
+    """Raised by a WsSeat when the move AT the current ply is illegal or
+    unparseable (ADR-0016 B7). run_game turns it into a game_over with
+    termination "illegal_move" (the offending `color` loses)."""
+
+    def __init__(self, color: str):
+        super().__init__(f"{color} played an illegal move")
+        self.color = color
+
+
 class WsSeat:
     def __init__(self, session: "Session", game_id: str, color: str, rating: int):
         self.session = session
@@ -39,10 +57,21 @@ class WsSeat:
         self.rating = rating
         self._pending_id: Optional[str] = None
 
+    async def _send(self, message) -> None:
+        """Best-effort outbound (D-b): a dead socket must not crash run_game."""
+        with contextlib.suppress(Exception):
+            await self.session.send(message)
+
     async def request_move(
-        self, board: chess.Board, ply: int, last_move: Optional[dict], clocks: Clocks
+        self,
+        board: chess.Board,
+        ply: int,
+        last_move: Optional[dict],
+        clocks: Clocks,
+        applied: Optional[dict[int, str]] = None,
     ) -> str:
-        await self.session.send(
+        applied = applied or {}
+        await self._send(
             YourTurn(
                 game_id=self.game_id,
                 ply=ply,
@@ -55,30 +84,37 @@ class WsSeat:
         )
         while True:
             msg: Move = await self.session.inbound.get()
-            if msg.ply != ply:
-                await self.session.send(
-                    Error(code="INVALID_PLY", message=f"expected ply {ply}")
-                )
+            if msg.ply == ply:
+                # The move for the current ply. Illegal/unparseable → forfeit (B7).
+                try:
+                    move = chess.Move.from_uci(msg.uci)
+                except ValueError:
+                    raise IllegalMoveForfeit(self.color)
+                if move not in board.legal_moves:
+                    raise IllegalMoveForfeit(self.color)
+                self._pending_id = msg.id
+                return msg.uci
+            if msg.ply < ply:
+                # A past ply (§9): a blind resend after a blip.
+                if applied.get(msg.ply) == msg.uci:
+                    # Duplicate of what we already applied → re-ack, do NOT re-apply.
+                    await self._send(
+                        MoveAck(
+                            id=msg.id, game_id=self.game_id, ply=msg.ply, accepted=True
+                        )
+                    )
+                # else: stale/conflicting late duplicate → ignore, NOT penalized.
                 continue
-            try:
-                move = chess.Move.from_uci(msg.uci)
-            except ValueError:
-                await self.session.send(Error(code="INVALID_MESSAGE", message="unparseable move"))
-                continue
-            if move not in board.legal_moves:
-                # V1: ignored, clock keeps running. Illegal-move forfeit is V4.
-                await self.session.send(Error(code="INVALID_MESSAGE", message="illegal move"))
-                continue
-            self._pending_id = msg.id
-            return msg.uci
+            # msg.ply > ply → from the future (§9): reject, keep waiting.
+            await self._send(Error(code="INVALID_PLY", message=f"expected ply {ply}"))
 
     async def confirm_move(self, ply: int) -> None:
-        await self.session.send(
+        await self._send(
             MoveAck(id=self._pending_id, game_id=self.game_id, ply=ply, accepted=True)
         )
 
     async def game_over(self, result: str, termination: str, final_fen: str, pgn: str) -> None:
-        await self.session.send(
+        await self._send(
             GameOver(
                 game_id=self.game_id,
                 result=result,
@@ -98,9 +134,15 @@ class HouseSeat:
         self.delay = delay  # optional pause so house moves are watchable (dev)
 
     async def request_move(
-        self, board: chess.Board, ply: int, last_move: Optional[dict], clocks: Clocks
+        self,
+        board: chess.Board,
+        ply: int,
+        last_move: Optional[dict],
+        clocks: Clocks,
+        applied: Optional[dict[int, str]] = None,
     ) -> str:
-        # In-process; the house bot never needs a your_turn frame. An optional
+        # In-process; the house bot never needs a your_turn frame and never
+        # resends, so `applied` (§9 idempotency) is irrelevant here. An optional
         # delay (await, so the loop isn't blocked) paces moves for spectators and
         # is charged to the house's own clock.
         if self.delay:
