@@ -1,21 +1,31 @@
-"""The bot WebSocket endpoint — PROTOCOL.md §3-5 (handshake + seek).
+"""The bot WebSocket endpoint — PROTOCOL.md §3-5 (handshake + seek) + §8 reconnect.
 
 Handshake authenticates the bot's real API key (ADR-0014; injected
 `BotAuthenticator`), binds the Session to the real Bot identity, and enforces
 newest-wins session replacement (ADR-0016 A6). `hello`->`welcome`,
-protocol-version check, and `seek`->`seek_ack`/pairing follow. Reconnect-resume
-of a mid-game seat is V4.
+protocol-version check, and `seek`->`seek_ack`/pairing follow.
+
+Reconnect-resume (V4, PROTOCOL §8): on reconnect the bot re-opens the socket and
+sends `hello`; if it has a live game, `welcome.active_game` carries the resume
+snapshot, its seat is rebound to the new session, and a `your_turn` is re-sent if
+it is the bot's turn. The clock keeps running while away (ADR-0025 #3 — no
+separate reconnect window). If the game ended while the bot was away, the missed
+`game_over` is delivered on reconnect (D-vi).
 """
+
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..ids import new_id
 from ..protocol.messages import (
     Error,
+    GameOver,
     Hello,
     Move,
     Pong,
     ProtocolError,
+    Rating,
     Seek,
     SeekAck,
     SeekCancel,
@@ -23,6 +33,9 @@ from ..protocol.messages import (
     parse_client_message,
 )
 from .session import Session
+
+if TYPE_CHECKING:
+    from ..game.game import Game
 
 router = APIRouter()
 
@@ -32,6 +45,20 @@ SUPPORTED_VERSIONS = {"1.0"}
 # WebSocket close codes
 _CLOSE_POLICY_VIOLATION = 1008
 _CLOSE_PROTOCOL_ERROR = 1002
+
+
+def _terminal_game_over(game: "Game", bot) -> GameOver:
+    """Rebuild the game_over a bot missed while disconnected (D-vi). An aborted
+    game carries no rating (§8 — ABORTED does not affect rating)."""
+    rating = None if game.result == "aborted" else Rating(before=bot.rating, after=bot.rating)
+    return GameOver(
+        game_id=game.id,
+        result=game.result,
+        termination=game.termination,
+        final_fen=game.final_fen,
+        pgn=game.pgn or "",
+        rating=rating,
+    )
 
 
 def _bearer_token(websocket: WebSocket) -> str | None:
@@ -88,25 +115,45 @@ async def bot_ws(websocket: WebSocket) -> None:
         await websocket.close(_CLOSE_PROTOCOL_ERROR)
         return
 
+    # --- newest-wins: this becomes the bot's live session; close the prior one
+    # FIRST (ADR-0016 A6) so the welcome/resume below goes out on the new socket
+    # only. Best-effort — the old socket may already be half-dead. ---
+    registry = websocket.app.state.session_registry
+    game_registry = websocket.app.state.game_registry
+    replaced = registry.register(session)
+    if replaced is not None:
+        await replaced.terminate("replaced by a newer connection")
+
+    # --- reconnect-resume (PROTOCOL §8): rebind a live game seat to this session
+    # and hand back the resume snapshot; the clock kept running while away. ---
+    active = game_registry.active_game_for(session.bot.id)
+    resume = active.resume_payload(session.bot.id) if active is not None else None
+
     await session.send(
         Welcome(
             protocol_version=SERVER_PROTOCOL_VERSION,
             session_id=session.session_id,
             bot=session.bot,
-            active_game=None,
+            active_game=resume,
         )
     )
 
-    # --- newest-wins: this becomes the bot's live session; close the prior one
-    # (ADR-0016 A6). Best-effort — the old socket may already be half-dead. ---
-    registry = websocket.app.state.session_registry
-    replaced = registry.register(session)
-    if replaced is not None:
-        await replaced.terminate("replaced by a newer connection")
+    if active is not None and resume is not None:
+        seat = active.seat_for(session.bot.id)
+        if seat is not None:
+            seat.rebind(session)  # outbound now targets the new socket
+            # Its your_turn (if any) went to the dead socket — re-send if on move.
+            if resume["to_move"] == resume["your_color"]:
+                await seat.resend_your_turn(active.live)
+    elif active is None:
+        # The bot's game ended while it was away → deliver the missed game_over.
+        terminal = game_registry.recent_terminal_for(session.bot.id)
+        if terminal is not None:
+            await session.send(_terminal_game_over(terminal, session.bot))
+            game_registry.clear_recent_terminal(session.bot.id)
 
     # --- main receive loop ---
     queue = websocket.app.state.matchmaking_queue
-    game_registry = websocket.app.state.game_registry
     try:
         while True:
             raw = await websocket.receive_text()

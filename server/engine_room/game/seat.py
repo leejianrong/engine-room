@@ -68,6 +68,24 @@ class WsSeat:
         queue is unchanged, so an in-flight `request_move` keeps working."""
         self.session = session
 
+    async def resend_your_turn(self, live) -> None:
+        """Re-send `your_turn` after a reconnect when it is this seat's move — the
+        original went to the now-dead socket (PROTOCOL §8). Best-effort."""
+        await self._send(
+            YourTurn(
+                game_id=self.game_id,
+                ply=live.ply,
+                fen=live.board.fen(),
+                last_move=live.last_move,
+                clocks=Clocks(
+                    white_ms=live.clock.remaining_ms(chess.WHITE),
+                    black_ms=live.clock.remaining_ms(chess.BLACK),
+                ),
+                your_color=self.color,
+                opponent_draw_offer=False,
+            )
+        )
+
     async def _send(self, message) -> None:
         """Best-effort outbound (D-b): a dead socket must not crash run_game."""
         with contextlib.suppress(Exception):
