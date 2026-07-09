@@ -69,6 +69,7 @@ def create_app(
     *,
     always_pair: bool = False,
     matcher_kwargs: dict | None = None,
+    hb_kwargs: dict | None = None,
 ) -> FastAPI:
     """Application factory.
 
@@ -83,7 +84,9 @@ def create_app(
     `always_pair` swaps the V3 Elo matcher for V1's synchronous always-pair-vs-
     house queue — used by game-loop/spectate tests that just need an instant game
     and don't exercise matchmaking. `matcher_kwargs` overrides the Elo matcher's
-    settings-derived tuning (TTL, greeter, tick interval) for tests.
+    settings-derived tuning (TTL, greeter, tick interval) for tests. `hb_kwargs`
+    overrides the heartbeat tuning (`ping_interval_seconds`,
+    `liveness_timeout_seconds`) so liveness tests use tiny values (V4).
     """
     app = FastAPI(title="Engine Room", version=__version__, lifespan=_lifespan)
 
@@ -105,11 +108,24 @@ def create_app(
     # Turns a paired Game into a running game: game_start fan-out + run_game
     # spawn (D-c). Shared by the always-pair path and the V3 matcher.
     app.state.game_launcher = GameLauncher(
-        app.state.pubsub, finalizer, house_move_delay=settings.house_move_delay_seconds
+        app.state.pubsub,
+        game_registry=app.state.game_registry,
+        finalizer=finalizer,
+        house_move_delay=settings.house_move_delay_seconds,
     )
     app.state.bot_authenticator = bot_authenticator or NullAuthenticator()
     # One live session per bot; newest-wins replacement (ADR-0016 A6).
     app.state.session_registry = SessionRegistry()
+    # V4 heartbeat tuning (§10): per-connection ping interval + liveness timeout.
+    # Settings defaults (10s / 30s); tests inject tiny values via hb_kwargs.
+    hb = {
+        "ping_interval_seconds": settings.hb_ping_interval_seconds,
+        "liveness_timeout_seconds": settings.hb_liveness_timeout_seconds,
+    }
+    if hb_kwargs:
+        hb.update(hb_kwargs)
+    app.state.hb_ping_interval_seconds = hb["ping_interval_seconds"]
+    app.state.hb_liveness_timeout_seconds = hb["liveness_timeout_seconds"]
     # V3: real Elo pools behind MatchmakingQueue (R6); the loop is started by the
     # lifespan and delivers game_start asynchronously (ADR-0025). `always_pair`
     # keeps V1's synchronous house pairing for game-loop/spectate tests.

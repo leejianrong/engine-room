@@ -171,7 +171,7 @@ Confirms receipt/application. If the client gets no `move_ack` (network blip), i
 - `result` ∈ `white_wins | black_wins | draw | aborted`; `termination` ∈ the ADR-0008 vocabulary (`checkmate, timeout, resignation, illegal_move, disconnect_forfeit, stalemate, insufficient_material, threefold_repetition, fifty_move, agreement, aborted`).
 - `rating` is this bot's Elo change (absent for `aborted`, which does not affect rating — ADR-0011/0016).
 
-### Reconnect (I6, ADR-0014/0025)
+### Reconnect (I6, ADR-0014/0025) — *implemented in V4*
 On reconnect the bot simply re-opens the WebSocket with the same key and sends `hello`. The `welcome.active_game` is populated:
 ```json
 { "type": "welcome", "protocol_version": "1.0", "session_id": "sess_new",
@@ -189,7 +189,7 @@ If it is the bot's turn, the server also (re)sends `your_turn`. Because the **cl
 
 ---
 
-## 9. Move idempotency & ordering (resolves I4)
+## 9. Move idempotency & ordering (resolves I4) — *implemented in V4*
 
 The `ply` counter makes the exchange safe against resends and reconnects:
 
@@ -202,9 +202,9 @@ The `ply` counter makes the exchange safe against resends and reconnects:
 
 This lets an SDK safely "send, and resend on missing ack / after reconnect" without ever double-applying or self-forfeiting.
 
-## 10. Heartbeat / liveness (ADR-0025)
-- The server sends `{"type":"ping","t":<ms>}` on an interval (default **10s**, tunable); the client replies `{"type":"pong","t":<same>}`.
-- A peer that misses the liveness timeout (default **~30s** / 3 missed) is treated as disconnected — its socket is considered dead.
+## 10. Heartbeat / liveness (ADR-0025) — *implemented in V4*
+- The server sends `{"type":"ping","t":<ms>}` on an interval (default **10s**, `ER_HB_PING_INTERVAL_SECONDS`); the client replies `{"type":"pong","t":<same>}`.
+- A peer that misses the liveness timeout (default **~30s** / 3 missed, `ER_HB_LIVENESS_TIMEOUT_SECONDS`) is treated as disconnected — its socket is closed (turning a half-dead socket into a real disconnect).
 - Liveness is used **only** to detect **mutual abandonment** (both seats gone → game `ABORTED`, ADR-0025/I7). A single disconnected bot is **not** forfeited by heartbeat — only by its game clock.
 
 ## 11. Errors

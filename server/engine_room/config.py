@@ -121,6 +121,16 @@ class Settings(BaseSettings):
     mm_greeter_solo_wait_seconds: float = 3.0
     mm_greeter_pools: list[str] = ["180+0"]
 
+    # --- V4 resilience (slice A4, ADR-0025 #3 / PROTOCOL §10) ---
+    # Heartbeat: the server pings each live bot socket every `hb_ping_interval_seconds`;
+    # a socket that has not sent a `pong` within `hb_liveness_timeout_seconds` is
+    # treated as dead and closed (turning a half-dead socket into a real disconnect).
+    # Liveness is used ONLY to detect mutual abandonment (both seats gone → ABORTED);
+    # a single disconnected bot is never forfeited by heartbeat — only by its clock.
+    # Tests set tiny values (e.g. 0.05 / 0.15) to exercise a timeout without waiting.
+    hb_ping_interval_seconds: float = 10.0
+    hb_liveness_timeout_seconds: float = 30.0  # ~3 missed pings
+
     # Artificial pause before the in-process house bot replies. Default 0 (instant,
     # no production impact); local dev sets ~0.5s so house games are watchable move
     # by move. Charged to the house's own clock — safe on a Blitz clock.

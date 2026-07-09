@@ -1,8 +1,19 @@
 # ADR-0004: Mid-game disconnect — reconnect window with the clock still running
 
-- **Status:** accepted
+- **Status:** **superseded by ADR-0025 #3** (the reconnect *window* is removed — the
+  clock is the sole arbiter). The rest stands: resume-the-same-game, clock-runs-while-away,
+  and `ply`-idempotency. **Realized in V4** (slice A4 / `docs/shaping/V4-plan.md`).
 - **Date:** 2026-07-07
 - **Deciders:** leejianrong, Claude
+
+> **Superseded note (ADR-0025 #3, realized in V4):** there is **no separate reconnect
+> window** that forfeits independently. A disconnected bot loses only by **flagging on its
+> own clock** (on its turn) or by an illegal move; it may reconnect anytime the game is
+> live and resume from `welcome.active_game` (PROTOCOL §8). A heartbeat/liveness timeout is
+> used **only** to detect **mutual abandonment** (both seats gone → ABORTED), never to
+> forfeit a single bot. Everything below about *window expiry = forfeit* is therefore
+> obsolete; the "resume the same game, clock keeps running, idempotent move-resend" parts
+> are what V4 built.
 
 ## Context
 Bots run on users' own home machines and cloud instances (REQS), so connections will blip. We must decide what happens when a bot's WebSocket (ADR-0002) drops mid-game. Answers QUESTIONS I1, I2; informs H3.

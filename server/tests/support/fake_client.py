@@ -83,6 +83,9 @@ class FakeBot:
         self.send({"type": "seek_cancel", "seek_id": seek_id})
         return self.recv()  # seek_ended (or error)
 
+    def pong(self, t: int = 0) -> None:
+        self.send({"type": "pong", "t": t})
+
     def play_out(self, seed: int = 0, max_plies: int = 4000) -> dict:
         """Play random legal moves in response to each your_turn until game_over.
 
@@ -106,6 +109,8 @@ class FakeBot:
                 )
             elif kind == "move_ack":
                 continue
+            elif kind == "ping":
+                self.pong(msg.get("t", 0))  # keep the heartbeat happy (§10)
             elif kind == "game_over":
                 return msg
             else:

@@ -62,11 +62,19 @@ class Move(BaseModel):
     offer_draw: bool = False  # honored in V5
 
 
+class Pong(BaseModel):
+    type: Literal["pong"]
+    # Echo of the ping's timestamp (PROTOCOL §10). The server only needs the
+    # arrival of a pong for liveness; `t` is carried for symmetry / future RTT.
+    t: int = 0
+
+
 _CLIENT_MODELS: dict[str, type[BaseModel]] = {
     "hello": Hello,
     "seek": Seek,
     "seek_cancel": SeekCancel,
     "move": Move,
+    "pong": Pong,
 }
 
 
@@ -142,6 +150,14 @@ class GameOver(BaseModel):
     final_fen: str
     pgn: str
     rating: Optional[Rating] = None  # this bot's Elo change; stubbed in V1, real in V5
+
+
+class Ping(BaseModel):
+    type: Literal["ping"] = "ping"
+    # Server heartbeat (PROTOCOL §10). The client replies with `pong` echoing `t`;
+    # a peer that misses the liveness timeout is treated as a dead socket (used
+    # ONLY to detect mutual abandonment → ABORTED, never to forfeit a lone bot).
+    t: int = 0
 
 
 class Error(BaseModel):

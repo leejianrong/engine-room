@@ -10,11 +10,20 @@ and one is minted for you (via `mint_bot`, needs DB access).
     uv run python -m engine_room.devtools.demo_bot --loop       # keep starting games
     uv run python -m engine_room.devtools.demo_bot --token crbk_...   # use a specific key
     uv run python -m engine_room.devtools.demo_bot --engine random    # dumb (random) moves
+    uv run python -m engine_room.devtools.demo_bot --drop-after 4      # V4 reconnect demo
 
 By default the bot plays minimax + alpha-beta (`--engine`, `--depth 3`) so the
 game looks like real chess. It pauses `--move-delay` (0.5s) before each move so
 you can watch; pair it with ER_HOUSE_MOVE_DELAY_SECONDS so the house side is
-paced too. Other options: --api (localhost:8001), --web (localhost:5174),
+paced too.
+
+V4 (resilience): the bot answers heartbeat `ping` frames with `pong`, and if the
+socket drops mid-game it reconnects with the same key and **resumes the same
+game** from `welcome.active_game` (PROTOCOL §8). `--drop-after N` deliberately
+kills and reopens the socket after N of the bot's own moves so you can watch it
+reconnect and finish the game — the V4 demo.
+
+Other options: --api (localhost:8001), --web (localhost:5174),
 --startup-delay (4s), --base/--inc time control, --token.
 
 (`websockets` is available in the server image via uvicorn[standard].)
@@ -33,61 +42,123 @@ import websockets
 from ..game.minimax import choose_move as minimax_move
 
 
-async def play_one(args, key: str, rng: random.Random) -> None:
-    async with websockets.connect(
+async def _connect(args, key: str):
+    """Open a socket and complete the hello handshake; return (ws, welcome)."""
+    ws = await websockets.connect(
         f"ws://{args.api}/api/bot/v1",
         additional_headers={"Authorization": f"Bearer {key}"},
-    ) as ws:
-        await ws.send(json.dumps({"type": "hello", "protocol_version": "1.0"}))
-        welcome = json.loads(await ws.recv())
-        if welcome.get("type") != "welcome":
-            raise SystemExit(f"handshake failed: {welcome}")
-        await ws.send(
-            json.dumps(
-                {
-                    "type": "seek",
-                    "id": "demo",
-                    "time_control": {"base_seconds": args.base, "increment_seconds": args.inc},
-                }
-            )
+    )
+    await ws.send(json.dumps({"type": "hello", "protocol_version": "1.0"}))
+    welcome = json.loads(await ws.recv())
+    if welcome.get("type") != "welcome":
+        raise SystemExit(f"handshake failed: {welcome}")
+    return ws, welcome
+
+
+async def _next(ws) -> dict:
+    """Read the next protocol frame, transparently answering heartbeat pings
+    (§10) so a paced/long game is never closed for missed liveness."""
+    while True:
+        msg = json.loads(await ws.recv())
+        if msg.get("type") == "ping":
+            await ws.send(json.dumps({"type": "pong", "t": msg.get("t", 0)}))
+            continue
+        return msg
+
+
+async def _next_turn(ws) -> dict:
+    """Read until the next actionable frame — your_turn or game_over — skipping
+    move_ack (and pings)."""
+    while True:
+        msg = await _next(ws)
+        if msg["type"] in ("your_turn", "game_over"):
+            return msg
+
+
+def _pick_move(turn: dict, args, rng: random.Random) -> str:
+    board = chess.Board(turn["fen"])
+    if args.engine == "minimax":
+        return minimax_move(board, depth=args.depth, rng=rng)
+    return rng.choice(list(board.legal_moves)).uci()
+
+
+async def _reconnect_resume(args, key: str, game_id: str):
+    """Reopen the socket and resume the live game from welcome.active_game (§8).
+    Returns (ws, turn) where `turn` is the your_turn/game_over to act on, or
+    (ws, None) if there is nothing to resume."""
+    ws, welcome = await _connect(args, key)
+    active = welcome.get("active_game")
+    if active and active.get("game_id") == game_id:
+        print(f"  ↻ reconnected — resumed {game_id} at ply {active['ply']}", flush=True)
+        # If it's our move the server re-sends your_turn; otherwise we wait for it.
+        return ws, await _next_turn(ws)
+    # No active game: the server may have queued the missed game_over (D-vi).
+    return ws, None
+
+
+async def play_one(args, key: str, rng: random.Random) -> None:
+    ws, _ = await _connect(args, key)
+    await ws.send(
+        json.dumps(
+            {
+                "type": "seek",
+                "id": "demo",
+                "time_control": {"base_seconds": args.base, "increment_seconds": args.inc},
+            }
         )
-        await ws.recv()  # seek_ack
-        # game_start is asynchronous since V3 (the matcher pairs us — with a real
-        # opponent if one is queued, else the 3+0 greeter house bot).
-        game_start = json.loads(await ws.recv())
-        if game_start.get("type") != "game_start":
-            raise SystemExit(f"expected game_start, got {game_start}")
-        game_id = game_start["game_id"]
-        turn = json.loads(await ws.recv())  # your_turn ply 0
+    )
+    # game_start is asynchronous since V3 (the matcher pairs us — with a real
+    # opponent if one is queued, else the 3+0 greeter house bot). Skip the
+    # seek_ack and any stale game_over left over from a previous game (D-vi
+    # delivers a missed result on the next connect).
+    while True:
+        msg = await _next(ws)
+        if msg.get("type") == "game_start":
+            game_start = msg
+            break
+    game_id = game_start["game_id"]
 
-        url = f"http://{args.web}/?game={game_id}"
-        print("\n" + "=" * 60)
-        print(f"  Match started vs {game_start['opponent']['name']}.")
-        print(f"  Watch it here:  {url}")
-        print(f"  (starting moves in {args.startup_delay}s — open the URL now)")
-        print("=" * 60 + "\n", flush=True)
-        await asyncio.sleep(args.startup_delay)
+    url = f"http://{args.web}/?game={game_id}"
+    print("\n" + "=" * 60)
+    print(f"  Match started vs {game_start['opponent']['name']}.")
+    print(f"  Watch it here:  {url}")
+    print(f"  (starting moves in {args.startup_delay}s — open the URL now)")
+    print("=" * 60 + "\n", flush=True)
+    await asyncio.sleep(args.startup_delay)
 
-        while True:
-            # Pause *before* moving so each side's move is spaced out for watching
-            # (the pair to this is the server-side house move delay for Black).
-            await asyncio.sleep(args.move_delay)
-            board = chess.Board(turn["fen"])
-            if args.engine == "minimax":
-                uci = minimax_move(board, depth=args.depth, rng=rng)
-            else:
-                uci = rng.choice(list(board.legal_moves)).uci()
+    turn = await _next_turn(ws)  # your_turn ply 0
+    my_moves = 0
+    while True:
+        if turn["type"] == "game_over":
+            print(f"Game over: {turn['result']} · {turn['termination']}\n", flush=True)
+            await ws.close()
+            return
+
+        await asyncio.sleep(args.move_delay)
+        uci = _pick_move(turn, args, rng)
+        try:
             await ws.send(
                 json.dumps({"type": "move", "game_id": game_id, "ply": turn["ply"], "uci": uci})
             )
-            while True:
-                msg = json.loads(await ws.recv())
-                if msg["type"] == "your_turn":
-                    turn = msg
-                    break
-                if msg["type"] == "game_over":
-                    print(f"Game over: {msg['result']} · {msg['termination']}\n", flush=True)
-                    return
+            turn = await _next_turn(ws)
+        except websockets.ConnectionClosed:
+            ws, turn = await _reconnect_resume(args, key, game_id)
+            if turn is None:
+                print("  (game already ended while reconnecting)\n", flush=True)
+                await ws.close()
+                return
+            continue
+
+        my_moves += 1
+        # V4 demo: deliberately drop mid-game, then reconnect and resume.
+        if args.drop_after and my_moves == args.drop_after:
+            print(f"  ✂ simulating a mid-game disconnect after {my_moves} moves…", flush=True)
+            await ws.close()
+            await asyncio.sleep(args.drop_pause)
+            ws, turn = await _reconnect_resume(args, key, game_id)
+            if turn is None:
+                await ws.close()
+                return
 
 
 async def _resolve_key(args) -> str:
@@ -114,6 +185,10 @@ async def main() -> None:
                    help="move engine (default: minimax + alpha-beta)")
     p.add_argument("--depth", type=int, default=3, help="minimax search depth")
     p.add_argument("--loop", action="store_true", help="keep starting new games")
+    p.add_argument("--drop-after", type=int, default=0, dest="drop_after",
+                   help="V4 demo: kill+reconnect the socket after N of the bot's moves (0=never)")
+    p.add_argument("--drop-pause", type=float, default=1.0, dest="drop_pause",
+                   help="seconds to stay disconnected in the --drop-after demo")
     args = p.parse_args()
 
     key = await _resolve_key(args)

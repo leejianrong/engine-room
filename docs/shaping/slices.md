@@ -20,7 +20,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 | **V1** ✅ | A1 | Stub-auth bot ↔ house `RandomBot` plays a full real 3+0 game under the server clock; moves stream live to a SvelteKit page; result+PGN in Postgres | — (skeleton) |
 | **V2** ✅ | A2 | Sign in with GitHub, create a bot, get a key once; the **real key** authenticates the WS handshake (stub-auth removed) | N1 auth; +REST bot-CRUD; newest-wins |
 | **V3** ✅ | A3 | Two real user bots get matched by Elo in a 3+0 pool; same-owner bots never paired; a lonely seek expires | N3 matcher → pools |
-| **V4** | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
+| **V4** ✅ | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
 | **V5** | A5 | Bots resign and agree draws; server auto-draws stalemate/insufficient/repetition; ratings move on FINISHED | N5/N8 outcomes |
 | **V6** | A6 | Anonymous visitor opens the dashboard, sees the live lobby, clicks a game, watches from the correct current state, replays from move 1 | N9/U1 spectator UX |
 | **V7** | A7 | A newcomer `pip`-installs `chessroom`, runs the `uv` quickstart `RandomBot`, and is playing in minutes; UCI bridge points an engine at the platform | client → packaged SDK |
@@ -95,6 +95,29 @@ Ratings are **read-only** (rating updates on FINISHED are V5, ADR-0011). No sche
 logic is unit-tested DB-free (injectable clock → deterministic widening/TTL) and the WS seam by a
 live-uvicorn two-bot integration test. All checks green.
 
-## V4–V7 — defined, breadboard deferred
+## V4 — Resilience
+
+**Status:** ✅ **complete** (2026-07-09). Built in 6 sub-steps (see [V4-plan.md](V4-plan.md)) on
+`feat/v4-resilience`; the three load-bearing decisions (D-i seat-owned inbox, D-iii per-connection
+ping task, D-vi minimal terminal stash) were confirmed by the owner and are pinned. Thickens **N1**
+(session/handshake) and **N5** (game loop/seat): a mid-game bot **reconnects with the same key and
+resumes the same seat** — `welcome.active_game` carries the §8 snapshot, the seat (which now owns a
+**durable inbound queue** that survives a newest-wins session swap, ADR-0009/D-i) is rebound to the
+new session, and `your_turn` is re-sent if it's the bot's move; the **clock keeps running while away**
+(ADR-0025 #3 — no reconnect window, superseding ADR-0004). `ply`-**idempotency** (PROTOCOL §9): a dup
+resend at an applied ply is re-acked (never re-applied), a stale conflicting resend is ignored (not
+penalized), a future ply is `INVALID_PLY`. An **illegal/unparseable move on your turn is an instant
+forfeit** (`game_over` `illegal_move`, ADR-0016 B7) — flipping V1's report-and-ignore. A
+per-connection **heartbeat** (ping/pong, §10, `ER_HB_*` 10s/30s) closes a half-dead socket, and
+**mutual abandonment** (both seats gone) **aborts** the game (`ABORTED`, no result/rating, ADR-0010/
+0016 I7); a single disconnected bot is never forfeited by heartbeat — only by its clock. A `game_over`
+missed while disconnected is delivered on reconnect (D-vi). `GameRegistry` gains a bot→active-game
+index; `Game` carries a `LiveState`. **No schema change** (resilience is in-memory). Unit tests cover
+idempotency/forfeit + the resume snapshot/index DB-free; live-uvicorn integration tests kill a socket
+mid-game and assert resume + finish, safe blind-resend, mutual-abandonment abort, and heartbeat close.
+The demo bot (`make demo`) answers pings and reconnects+resumes; `--drop-after N` shows the kill/
+reconnect/finish live. All checks green.
+
+## V5–V7 — defined, breadboard deferred
 
 Each is a real vertical slice ending in a demo (see slice map). Full affordance breadboards are produced in this doc when the slice is picked up, and its `V<n>-plan.md` follows. Coarse thickening targets are in [shaping.md → A2–A7](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc).
