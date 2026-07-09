@@ -11,6 +11,7 @@ and one is minted for you (via `mint_bot`, needs DB access).
     uv run python -m engine_room.devtools.demo_bot --token crbk_...   # use a specific key
     uv run python -m engine_room.devtools.demo_bot --engine random    # dumb (random) moves
     uv run python -m engine_room.devtools.demo_bot --drop-after 4      # V4 reconnect demo
+    uv run python -m engine_room.devtools.demo_bot --resign-after 6    # V5 resign demo
 
 By default the bot plays minimax + alpha-beta (`--engine`, `--depth 3`) so the
 game looks like real chess. It pauses `--move-delay` (0.5s) before each move so
@@ -22,6 +23,10 @@ socket drops mid-game it reconnects with the same key and **resumes the same
 game** from `welcome.active_game` (PROTOCOL §8). `--drop-after N` deliberately
 kills and reopens the socket after N of the bot's own moves so you can watch it
 reconnect and finish the game — the V4 demo.
+
+V5 (outcomes): `game_over` now carries the real Elo change ({before, after}), which
+this bot prints. `--resign-after N` resigns after N of the bot's own moves so you
+can watch a resignation (opponent wins) and the rating move — the V5 demo.
 
 Other options: --api (localhost:8001), --web (localhost:5174),
 --startup-delay (4s), --base/--inc time control, --token.
@@ -96,6 +101,15 @@ async def _reconnect_resume(args, key: str, game_id: str):
     return ws, None
 
 
+def _print_game_over(msg: dict) -> None:
+    line = f"Game over: {msg['result']} · {msg['termination']}"
+    rating = msg.get("rating")  # V5: {before, after}, absent for aborted games
+    if rating:
+        delta = rating["after"] - rating["before"]
+        line += f"  ·  rating {rating['before']} → {rating['after']} ({delta:+d})"
+    print(line + "\n", flush=True)
+
+
 async def play_one(args, key: str, rng: random.Random) -> None:
     ws, _ = await _connect(args, key)
     await ws.send(
@@ -130,7 +144,16 @@ async def play_one(args, key: str, rng: random.Random) -> None:
     my_moves = 0
     while True:
         if turn["type"] == "game_over":
-            print(f"Game over: {turn['result']} · {turn['termination']}\n", flush=True)
+            _print_game_over(turn)
+            await ws.close()
+            return
+
+        # V5 demo: resign after N of our own moves so you can watch a resignation
+        # (opponent wins) and the rating move in the game_over.
+        if args.resign_after and my_moves == args.resign_after:
+            print(f"  🏳  resigning after {my_moves} moves…", flush=True)
+            await ws.send(json.dumps({"type": "resign", "game_id": game_id}))
+            _print_game_over(await _next_turn(ws))
             await ws.close()
             return
 
@@ -189,6 +212,8 @@ async def main() -> None:
                    help="V4 demo: kill+reconnect the socket after N of the bot's moves (0=never)")
     p.add_argument("--drop-pause", type=float, default=1.0, dest="drop_pause",
                    help="seconds to stay disconnected in the --drop-after demo")
+    p.add_argument("--resign-after", type=int, default=0, dest="resign_after",
+                   help="V5 demo: resign after N of the bot's moves (0=never)")
     args = p.parse_args()
 
     key = await _resolve_key(args)

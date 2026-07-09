@@ -4,12 +4,20 @@ shaping: true
 
 # V5 Plan — Outcomes & real ratings
 
-**Status: 🚧 DRAFT (2026-07-09).** On `feat/v5-outcomes` off merged V4 (`d472d14`, PR #11). This
-plan is written first (mirroring [V4-plan.md](V4-plan.md)); the **open decisions** in
-[§ Decisions to confirm](#decisions-to-confirm-before-implementing) are put to the owner **before**
-any code lands. Ground truth is the ADRs + [PROTOCOL.md](../design/PROTOCOL.md); where this plan and
-the docs disagree, **the code wins and the docs get updated** (CLAUDE.md, PROTOCOL, the affected
-ADRs).
+**Status: ✅ COMPLETE (2026-07-09).** Built in 5 sub-steps on `feat/v5-outcomes` off merged V4
+(`d472d14`, PR #11). All six open decisions were confirmed by the owner up front (see [§ Decisions
+confirmed](#decisions-confirmed-2026-07-09)). 27 unit + 6 integration tests added; full fast gate +
+integration suite green. Ground truth is the ADRs + [PROTOCOL.md](../design/PROTOCOL.md); where this
+plan and the docs disagree, **the code wins and the docs get updated** (CLAUDE.md, PROTOCOL updated
+for V5).
+
+**Deviations as built:** (a) the pure Elo module landed as `game/ratings.py` (not `game/elo.py`) to
+avoid any confusion with the pairing-window `matchmaking/elo.py`. (b) `Game.color_of` was added as a
+public accessor so the endpoint routes controls without reaching into `_color_of`. (c) the finalizer
+takes optional `k_*` constructor overrides (defaulting to `ER_ELO_*` settings) so a test can pin the
+K-factor deterministically. (d) worker-terminal + real-DB rating tests use a small blocking/scripted
+seat that resigns via the control channel, because random house games don't reach a deterministic
+result. Everything else matches the plan.
 
 Implementation plan for slice **V5** (Shape A, part A5). Higher levels: [slices.md](slices.md) (V5
 row), [shaping.md](shaping.md) (R's, Shape A, A2–A7 thickening row).
