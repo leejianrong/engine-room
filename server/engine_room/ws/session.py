@@ -1,8 +1,10 @@
 """A Session is one live authenticated bot WebSocket connection (glossary; ADR-0009).
 
-Seat/game binding and reconnect (newest-wins) arrive with real auth in V2 and
-resilience in V4. For now a Session wraps the socket and serializes outbound
-frames so concurrent senders (later: the game loop) never interleave writes.
+A Session wraps the socket and serializes outbound frames so concurrent senders
+(the game loop, the heartbeat task) never interleave writes. It is pure
+*transport*: in V4 the durable inbound move queue lives on the seat, not here, so
+a newest-wins reconnect can swap the session under a running game without losing
+in-flight moves (D-i). `last_pong` records the last heartbeat reply (§10).
 """
 
 import asyncio
@@ -23,9 +25,9 @@ class Session:
         self.bot = bot
         self.session_id = session_id
         self._send_lock = asyncio.Lock()
-        # In-game messages (move, ...) the endpoint routes here for the game loop
-        # to consume, so the socket has a single reader (the endpoint).
-        self.inbound: asyncio.Queue = asyncio.Queue()
+        # Last time a heartbeat `pong` was seen (monotonic seconds); set by the
+        # endpoint's receive loop, read by the ping task for liveness (V4 s5).
+        self.last_pong: float = 0.0
 
     async def send(self, message: BaseModel) -> None:
         """Serialize and send one outbound message as a JSON text frame."""

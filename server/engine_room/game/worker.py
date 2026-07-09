@@ -17,11 +17,12 @@ import chess.pgn
 from ..channels import game_channel
 from ..protocol.messages import Clocks
 from .clock import Clock
-from .game import Game
+from .game import Game, LiveState
 from .seat import HouseSeat, IllegalMoveForfeit, WsSeat
 
 if TYPE_CHECKING:
     from ..pubsub.base import PubSub
+    from .registry import GameRegistry
 
 # (game, result, termination, final_fen, pgn) -> None
 Finalizer = Callable[[Game, str, str, str, str], Awaitable[None]]
@@ -42,6 +43,23 @@ def _make_seat(participant, game_id: str, color: str, house_delay: float = 0.0):
     if participant.session is not None:
         return WsSeat(participant.session, game_id, color, participant.bot.rating)
     return HouseSeat(participant.house, game_id, color, delay=house_delay)
+
+
+def prepare_game(game: Game, house_move_delay: float = 0.0) -> None:
+    """Attach seats + live state to a game so a reconnect that races the first
+    move already finds a bound seat (V4 D-i). Idempotent — the launcher calls it
+    before `game_start`; `run_game` calls it too so a direct-call (test/house)
+    path still works. A no-op once `game.live` is set."""
+    if game.live is not None:
+        return
+    game.seats = {
+        "white": _make_seat(game.white, game.id, "white", house_move_delay),
+        "black": _make_seat(game.black, game.id, "black", house_move_delay),
+    }
+    game.live = LiveState(
+        board=chess.Board(game.initial_fen),
+        clock=Clock(game.white_ms, game.black_ms),
+    )
 
 
 def _clocks(clock: Clock) -> Clocks:
@@ -75,6 +93,7 @@ async def run_game(
     pubsub: "PubSub",
     finalizer: Optional[Finalizer] = None,
     house_move_delay: float = 0.0,
+    registry: Optional["GameRegistry"] = None,
 ) -> tuple[str, str]:
     """Play the game to a terminal; return (result, termination).
 
@@ -83,14 +102,17 @@ async def run_game(
     `finalizer` is provided, the durable record is written before the bots are
     notified (N8); when None, persistence is skipped. `house_move_delay` paces
     an in-process house seat's replies (dev watchability; default instant).
+
+    V4: operates on `game.live` (board/clock/ply/last-move + applied history) so a
+    reconnect can read a consistent snapshot; if `registry` is given, the game is
+    unbound from the active-game index at terminal.
     """
-    board = chess.Board(game.initial_fen)
-    clock = Clock(game.white_ms, game.black_ms)
+    prepare_game(game, house_move_delay)
+    live = game.live
+    board = live.board
+    clock = live.clock
+    seats = {chess.WHITE: game.seats["white"], chess.BLACK: game.seats["black"]}
     inc_ms = game.time_control.increment_seconds * 1000
-    seats = {
-        chess.WHITE: _make_seat(game.white, game.id, "white", house_move_delay),
-        chess.BLACK: _make_seat(game.black, game.id, "black", house_move_delay),
-    }
     channel = game_channel(game.id)
     loop = asyncio.get_event_loop()
 
@@ -111,25 +133,21 @@ async def run_game(
         },
     )
 
-    ply = 0
-    last_move = None
     result = termination = None
-    # ply -> uci already applied, so a blind resend at a past ply is re-acked
-    # (never re-applied) by the seat (PROTOCOL §9). Moves to game.live in V4 s3.
-    applied: dict[int, str] = {}
 
     while True:
         color = board.turn
         seat = seats[color]
+        ply = live.ply
         t0 = loop.time()
         try:
             uci = await asyncio.wait_for(
                 seat.request_move(
                     board=board,
                     ply=ply,
-                    last_move=last_move,
+                    last_move=live.last_move,
                     clocks=_clocks(clock),
-                    applied=applied,
+                    applied=live.applied,
                 ),
                 timeout=clock.deadline_s(color),
             )
@@ -149,9 +167,9 @@ async def run_game(
         san = board.san(move)
         board.push(move)
         clock.credit_increment(color, inc_ms)  # 0 at MVP
-        applied[ply] = uci
+        live.applied[ply] = uci
         await seat.confirm_move(ply)
-        last_move = {"uci": uci, "san": san}
+        live.last_move = {"uci": uci, "san": san}
         await pubsub.publish(
             channel,
             {
@@ -164,7 +182,7 @@ async def run_game(
                 "to_move": "white" if board.turn == chess.WHITE else "black",
             },
         )
-        ply += 1
+        live.ply = ply + 1
 
         outcome = board.outcome()  # automatic terminals (no claim); auto-draws are V5
         if outcome is not None:
@@ -174,6 +192,14 @@ async def run_game(
     game.state = "finished"
     final_fen = board.fen()
     pgn = _render_pgn(game, board)
+    # Stash the terminal so a bot that missed game_over while away can be told on
+    # reconnect (D-vi); unbind from the active-game index.
+    game.result, game.termination, game.final_fen, game.pgn = (
+        result,
+        termination,
+        final_fen,
+        pgn,
+    )
     if finalizer is not None:
         await finalizer(game, result, termination, final_fen, pgn)
     for seat in seats.values():
@@ -188,4 +214,6 @@ async def run_game(
             "final_fen": final_fen,
         },
     )
+    if registry is not None:
+        registry.unbind_active(game)
     return result, termination

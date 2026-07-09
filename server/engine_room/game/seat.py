@@ -56,6 +56,17 @@ class WsSeat:
         self.color = color  # "white" | "black"
         self.rating = rating
         self._pending_id: Optional[str] = None
+        # The seat owns its inbound move queue (V4 D-i): it is the bot's durable
+        # game-side identity (ADR-0009), so a blocked `get()` survives a
+        # newest-wins session swap on reconnect. The endpoint routes `move`
+        # frames here (via the active-game index); `session` is swapped by
+        # `rebind()` on reconnect and is used only for outbound frames.
+        self.inbound: asyncio.Queue = asyncio.Queue()
+
+    def rebind(self, session: "Session") -> None:
+        """Point outbound at the reconnected session (newest-wins). The inbound
+        queue is unchanged, so an in-flight `request_move` keeps working."""
+        self.session = session
 
     async def _send(self, message) -> None:
         """Best-effort outbound (D-b): a dead socket must not crash run_game."""
@@ -83,7 +94,7 @@ class WsSeat:
             )
         )
         while True:
-            msg: Move = await self.session.inbound.get()
+            msg: Move = await self.inbound.get()
             if msg.ply == ply:
                 # The move for the current ply. Illegal/unparseable → forfeit (B7).
                 try:

@@ -14,6 +14,7 @@ from ..protocol.messages import (
     Error,
     Hello,
     Move,
+    Pong,
     ProtocolError,
     Seek,
     SeekAck,
@@ -105,6 +106,7 @@ async def bot_ws(websocket: WebSocket) -> None:
 
     # --- main receive loop ---
     queue = websocket.app.state.matchmaking_queue
+    game_registry = websocket.app.state.game_registry
     try:
         while True:
             raw = await websocket.receive_text()
@@ -127,8 +129,20 @@ async def bot_ws(websocket: WebSocket) -> None:
                 # Withdraw a waiting seek (ADR-0016 E8); matcher → seek_ended.
                 await queue.cancel(msg.seek_id)
             elif isinstance(msg, Move):
-                # Single socket reader: hand in-game moves to the game loop.
-                await session.inbound.put(msg)
+                # Single socket reader: route in-game moves to the bot's live
+                # seat inbox (durable across reconnects, V4 D-i) via the
+                # active-game index. No game → NO_ACTIVE_GAME (§11).
+                active = game_registry.active_game_for(session.bot.id)
+                seat = active.seat_for(session.bot.id) if active is not None else None
+                if seat is None:
+                    await session.send(
+                        Error(code="NO_ACTIVE_GAME", message="no active game for this move")
+                    )
+                else:
+                    await seat.inbound.put(msg)
+            elif isinstance(msg, Pong):
+                # Heartbeat reply (§10). Liveness tracking is wired in V4 s5.
+                pass
             elif isinstance(msg, Hello):
                 await session.send(
                     Error(code="INVALID_MESSAGE", message="already handshaken", fatal=False)
