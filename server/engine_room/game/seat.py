@@ -11,6 +11,7 @@ ignored (the clock keeps running); illegal-move *forfeit* is the V4 slice.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Optional
 
 import chess
@@ -90,15 +91,20 @@ class WsSeat:
 
 
 class HouseSeat:
-    def __init__(self, house: "RandomBot", game_id: str, color: str):
+    def __init__(self, house: "RandomBot", game_id: str, color: str, delay: float = 0.0):
         self.house = house
         self.game_id = game_id
         self.color = color
+        self.delay = delay  # optional pause so house moves are watchable (dev)
 
     async def request_move(
         self, board: chess.Board, ply: int, last_move: Optional[dict], clocks: Clocks
     ) -> str:
-        # In-process and instant; the house bot never needs a your_turn frame.
+        # In-process; the house bot never needs a your_turn frame. An optional
+        # delay (await, so the loop isn't blocked) paces moves for spectators and
+        # is charged to the house's own clock.
+        if self.delay:
+            await asyncio.sleep(self.delay)
         return self.house.choose_move(board)
 
     async def confirm_move(self, ply: int) -> None:

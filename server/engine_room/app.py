@@ -104,7 +104,9 @@ def create_app(
     app.state.finalizer = finalizer
     # Turns a paired Game into a running game: game_start fan-out + run_game
     # spawn (D-c). Shared by the always-pair path and the V3 matcher.
-    app.state.game_launcher = GameLauncher(app.state.pubsub, finalizer)
+    app.state.game_launcher = GameLauncher(
+        app.state.pubsub, finalizer, house_move_delay=settings.house_move_delay_seconds
+    )
     app.state.bot_authenticator = bot_authenticator or NullAuthenticator()
     # One live session per bot; newest-wins replacement (ADR-0016 A6).
     app.state.session_registry = SessionRegistry()

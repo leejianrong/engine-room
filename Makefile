@@ -8,6 +8,10 @@
 # Ports: backend :8001, frontend :5174, Postgres :5433. See CLAUDE.md.
 SHELL := /bin/bash
 COMPOSE := docker compose
+# Pace the house bot so demo games are watchable move-by-move. Scoped to the
+# server-running recipes only (NOT `make test` — it would sleep through games).
+# Production leaves ER_HOUSE_MOVE_DELAY_SECONDS at its default 0 = instant.
+HOUSE_DELAY := ER_HOUSE_MOVE_DELAY_SECONDS=0.5
 
 .DEFAULT_GOAL := help
 
@@ -31,7 +35,7 @@ migrate: db ## Apply DB migrations (creates tables + seeds the house bot)
 	cd server && uv run alembic upgrade head
 
 backend: ## Run the backend with hot reload (:8001)
-	cd server && uv run uvicorn engine_room.app:app --reload --port 8001
+	cd server && $(HOUSE_DELAY) uv run uvicorn engine_room.app:app --reload --port 8001
 
 frontend: ## Run the SvelteKit dev server with hot reload (:5174)
 	cd frontend && npm run dev
@@ -40,7 +44,7 @@ dev: migrate ## Hot-reload stack: db + backend + frontend (Ctrl-C stops all)
 	@echo "backend → http://localhost:8001   frontend → http://localhost:5174"
 	@echo "in another terminal:  make bot   (starts a game to watch)"
 	@trap 'kill 0' EXIT INT TERM; \
-	( cd server && uv run uvicorn engine_room.app:app --reload --port 8001 ) & \
+	( cd server && $(HOUSE_DELAY) uv run uvicorn engine_room.app:app --reload --port 8001 ) & \
 	( cd frontend && npm run dev ) & \
 	wait
 
