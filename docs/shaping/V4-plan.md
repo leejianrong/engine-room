@@ -4,9 +4,11 @@ shaping: true
 
 # V4 Plan — Resilience
 
-**Status: 📝 DRAFT (2026-07-09).** Open decisions (D-i … D-vii) are proposed below with a
-recommendation each and are **awaiting owner confirmation before implementation begins** (mirrors how
-V3's D-i … D-iv were confirmed then pinned). Built on `feat/v4-resilience`.
+**Status: 🔨 IN PROGRESS (2026-07-09).** The owner confirmed the three load-bearing forks on
+2026-07-09 — **D-i** (seat owns the inbox), **D-iii** (per-connection ping task, 10s/30s), and
+**D-vi** (minimal terminal stash) — after a visualized walkthrough of the options. The lower-fork
+decisions (D-ii/D-iv/D-v/D-vii) follow the recommendations below by owner deferral. All D-* are now
+pinned; implementation proceeds sub-step by sub-step. Built on `feat/v4-resilience`.
 
 Implementation plan for slice **V4** (from Shape A, part A4). Higher levels:
 [slices.md](slices.md) (V4 row), [shaping.md](shaping.md) (R's, Shape A, A4 thickening row).
@@ -62,15 +64,17 @@ state to answer `welcome.active_game`.
 | D-d | **Tunable heartbeat numbers live in `config.py`** (`ER_HB_*`), injected via `create_app`/`app.state` (mirrors `ER_MM_*`). Tests pass tiny values. | Same DI pattern V3 used; deterministic liveness tests without real 30s waits. |
 | D-e | **MVP scope held:** single process, no Redis; Blitz only (3+0/5+0); ports :8001/:5174/:5433; frontend↔backend CORS. Resign/draw/auto-draw and **real Elo rating updates stay V5**; rate limits / griefing cooldowns stay V-later. | R5; unchanged from V1–V3. |
 
-### Open (need confirmation before build — recommendation given)
-| # | Decision | Recommendation (weigh below) |
-|---|----------|------------------------------|
-| **D-i** | **Seat ↔ session rebinding: how does the live loop follow a newest-wins swap?** | **Seat owns a durable inbox + a swappable `session`, reached via a `bot_id→(game, seat)` index; live state lives on the `Game`.** See [Seat rebinding](#seat-rebinding-d-i). |
+### Confirmed 2026-07-09 (the three load-bearing forks) + deferred (lower-fork)
+The owner confirmed **D-i / D-iii / D-vi** directly (after the visualized options walkthrough); the
+remaining D-* were deferred to the recommendation below.
+| # | Decision | Pinned choice |
+|---|----------|---------------|
+| **D-i** ✅ | **Seat ↔ session rebinding: how does the live loop follow a newest-wins swap?** | **Confirmed — Seat owns a durable inbox + a swappable `session`, reached via a `bot_id→(game, seat)` index; live state lives on the `Game`.** The only design where a session swap can't lose an in-flight move. See [Seat rebinding](#seat-rebinding-d-i). |
 | **D-ii** | **`active-game` lookup + resume payload shape.** | **Add `bot_id→Game` (+ recent-terminal) index to `GameRegistry`, set at launch, cleared at terminal; `Game.resume_payload(bot_id)` emits the §8 fields.** See [Active-game lookup](#active-game-lookup-d-ii). |
-| **D-iii** | **Heartbeat architecture + which numbers to pin.** | **Per-connection ping task in the endpoint (no central sweeper); `pong` handled in the single receive loop; liveness timeout closes the socket → the disconnect path checks both-gone → ABORT.** Pin ping **10s**, liveness **30s** (~3 missed), `ER_HB_*`-tunable. See [Heartbeat](#heartbeat-d-iii). |
+| **D-iii** ✅ | **Heartbeat architecture + which numbers to pin.** | **Confirmed — Per-connection ping task in the endpoint (no central sweeper); `pong` handled in the single receive loop; liveness timeout closes the socket → the disconnect path checks both-gone → ABORT.** Pin ping **10s**, liveness **30s** (~3 missed), `ER_HB_*`-tunable. See [Heartbeat](#heartbeat-d-iii). |
 | **D-iv** | **ABORTED finalization mechanics.** | **A per-game `abort` event; `run_game` awaits move-or-abort each turn; on abort → `state="aborted"`, `result="aborted"`, `termination="aborted"`, finalize a `games` row with `rating=None`.** See [ABORTED](#aborted-finalization-d-iv). |
 | **D-v** | **`ply`-idempotency state + location (seat vs worker).** | **Worker owns `expected_ply` (its loop `ply`) + an `applied: dict[ply, uci]` history; the seat's read loop does the §9 classification + re-ack.** See [Idempotency](#ply-idempotency-d-v). |
-| **D-vi** | **"Flagged/finished while away" → deliver `game_over` on reconnect?** | **Yes, minimal:** stash the terminal `game_over` per bot at finalize; if reconnect finds no active game but a recent terminal, send it once. (Alternative: defer — bot sees `active_game:null` and is left to infer.) See [Terminal-on-reconnect](#terminal-on-reconnect-d-vi). |
+| **D-vi** ✅ | **"Flagged/finished while away" → deliver `game_over` on reconnect?** | **Confirmed — Yes, minimal:** stash the terminal `game_over` per bot at finalize; if reconnect finds no active game but a recent terminal, send it once. See [Terminal-on-reconnect](#terminal-on-reconnect-d-vi). |
 | **D-vii** | **How reconnect/idempotency/heartbeat are exercised at the WS seam.** | **Live-uvicorn harness (kill a socket mid-game, reconnect same key, assert resume) + unit tests on seat/worker with a fake session and injectable clock** (mirrors V3's `test_v3_matchmaking_live.py` + fake-clock unit tests). See [Tests](#tests-at-the-seams). |
 
 ---
