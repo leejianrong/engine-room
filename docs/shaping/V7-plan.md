@@ -4,9 +4,25 @@ shaping: true
 
 # V7 Plan — Hero onboarding: packaged `chessroom` SDK + `uv` quickstart + UCI bridge
 
-**Status: 📝 PLAN DRAFT (2026-07-09) — awaiting owner confirmation of the to-confirm decisions
-before implementation.** Built on `feat/v7-sdk` off merged V6 (`4600a7a`, PR #13; V6 was merged to
-main first so V7 can verify its end-to-end demo against the real dashboard). Ground truth is the
+**Status: ✅ COMPLETE (2026-07-09).** All six to-confirm decisions confirmed by the owner as the ★
+recommendation (Q1–Q6 below). Built on `feat/v7-sdk` off merged V6 (`4600a7a`, PR #13 — V6 was
+merged to main first so V7 could verify its end-to-end demo against the real dashboard). SDK unit
+(13) + contract/integration (3, incl. real reconnect + DB persistence) + an SDK-fed Playwright e2e;
+full fast gate (+ a new CI `sdk` job) + integration + e2e green. End-to-end verified live: `make
+mint` → quickstart `RandomBot` via the SDK → matched vs the house → visible on the V6 lobby.
+
+**Deviations as built:** (a) the run loop + reconnect/resend + resign/draw (sub-steps 1/2/4) landed
+as one interwoven `bot.py` unit (they share the play loop) and were committed together with the UCI
+bridge (sub-step 5) as the SDK-core commit; tests are split by concern. (b) the ADR-0023 smoke
+(sub-step 7) is a **browser** Playwright spec that spawns a real SDK bot (mint a key + `uv run` child,
+killed in `afterAll`) — the full flow, not just the integration variant the plan allowed; kept as a
+separate `sdk.spec.ts` so the V6 smoke is untouched. (c) the planned `Bot(name=)` kwarg was
+**removed** — live verification showed the lobby name is the server-side identity (the key), and
+`hello` carries no name, so it was dead API. (d) the SDK got its own CI `sdk` job + a pre-push hook
+line + a `make test` line (the plan only listed tests) since it's a separate `uv` project. (e) the
+contract test imports the SDK from `sdk/chessroom/src` via `sys.path` (its deps are already in the
+server env) rather than adding a server dependency — keeps the server's declared deps clean and the
+decoupling crisp. Everything else matches the plan. Ground truth is the
 ADRs + [PROTOCOL.md](../design/PROTOCOL.md); where this plan and the docs disagree, **the code wins
 and the docs get updated** (this slice is expected to record real drift against ADR-0021/0022/0024 —
 see D-a).
@@ -103,6 +119,17 @@ No new *server subsystems*. V7 thickens the **client** end of the wire contract:
 | **Q4 — UCI bridge packaging** | Ship in the SDK or as a separate entry point/package? | **★ In the SDK**, as `chessroom.uci.UCIBot` + a `chessroom-uci` console script (`[project.scripts]`). Delegates to `chess.engine.SimpleEngine.popen_uci(<engine path>)`; config = engine path + think time/depth. Stockfish is **not bundled** (user supplies a binary). Secondary polish (ADR-0023). ⟶ Alt: separate `chessroom-uci` package — more release surface for a near-free feature `python-chess` already enables. |
 | **Q5 — Quickstart contents & the "reference bots = house bots" reconciliation** | What's in the template, and how literally do the SDK reference bots "double as" the server house bots? | **★ Quickstart = a learning-shaped `RandomBot` file** (subclass `Bot`, ~10 lines) even though the SDK ships `RandomBot` — the point is to *show the pattern*. Plus `pyproject.toml`/`uv.lock`, `.env.example` (`CHESSROOM_KEY=`), README (the <20-min path), optional `Dockerfile` (ADR-0024). **Reference-bots reconciliation:** the SDK's `RandomBot`/`MinimaxBot` **mirror** the server house bots' logic (both trivially wrap `python-chess` / the existing `game/minimax.py`) but are **not shared-imported** — the server keeps its in-process `game/house_bots.py` (sessionless, no socket) and must not import the SDK (ADR-0021 decoupling). Documented as O-1, not a code merge. ⟶ Alt: make `game/house_bots.py` import `chessroom` — **rejected**, violates the decoupling ADR. |
 | **Q6 — Testing depth & the end-to-end smoke** | How do we test the packaged SDK, and do we finally wire the ADR-0023 signup→SDK→watch smoke? | **★ Three layers:** (1) **SDK unit** (`sdk/chessroom/tests/`, no infra) — protocol codec + run-loop logic over a *fake in-memory transport* (scripted server frames), incl. reconnect/resend/pong; fast, in the gate. (2) **Contract/integration** (`server/tests/integration/`, live-uvicorn + testcontainers) — the **packaged** SDK's `RandomBot` plays a real game vs the greeter to `game_over`; a simulated mid-game drop resumes and finishes; an import-boundary test asserts `chessroom` imports no `engine_room`. (3) **End-to-end** — extend V6's Playwright smoke (or a thin integration variant): start an SDK `RandomBot`, assert its game appears in `GET /api/games` / the lobby and is watchable (the ADR-0023 realization). ⟶ Alt: skip layer (3) — but V6 exists precisely to make this meaningful, so I recommend wiring at least the API-level end-to-end assertion. |
+
+### Decisions confirmed (2026-07-09)
+The owner confirmed **all six** to-confirm questions as the recommended (★) option:
+
+| # | Question | Confirmed |
+|---|----------|-----------|
+| **Q1 Repo layout** | Separate repo(s) vs. monorepo package? | ★ **Monorepo package now, extract-on-publish later.** SDK at `sdk/chessroom/` (own `pyproject.toml`, zero `engine_room` imports, boundary-tested); quickstart at `sdk/quickstart/` installing the SDK by path/git. Literal standalone-repo + PyPI publish → tracked follow-up (O-2, needs an owner PyPI account). ADR-0021/0024 updated to record the drift. |
+| **Q2/Q3 SDK surface** | How much beyond `choose_move`? | ★ **Minimal + resign/accept.** Required `choose_move`; optional no-op `on_game_start`/`on_game_over`; `choose_move` may return `RESIGN`/`ACCEPT_DRAW`; auto-declines offers. Offering draws + `on_your_turn` → v1.x. |
+| **Q4 UCI bridge** | In the SDK or separate? | ★ **In the SDK** — `chessroom.uci.UCIBot` + a `chessroom-uci` console script; Stockfish user-supplied; secondary polish. |
+| **Q5 Quickstart & reference bots** | Contents + how literal is "reference bots = house bots"? | ★ **Learning-shaped `RandomBot` quickstart file** (+ pyproject/uv/.env.example/README/optional Dockerfile); SDK `RandomBot`/`MinimaxBot` **mirror** the house-bot logic but are **not shared-imported** (decoupling — O-1). |
+| **Q6 Testing depth** | How deep + wire the ADR-0023 smoke now? | ★ **Three layers incl. e2e** — SDK unit (fake transport, in gate) + contract/integration (packaged SDK vs greeter to `game_over` on live-uvicorn+testcontainers, import-boundary) + end-to-end (SDK bot's game appears in the lobby / watchable, extending V6's Playwright smoke). |
 
 ---
 
@@ -268,7 +295,12 @@ from the SDK / an `on_your_turn` full-control hook (v1.x, Q2/Q3) · bundling a U
 (user supplies) · increment time controls / 1+0 bullet (dormant, ADR-0025 #6) · a machine-readable
 JSON-Schema derivation of PROTOCOL.md (ADR-0021 follow-up). **No server schema/behavior change.**
 
-## Open items (to carry)
+## Open items (resolved / carried)
+**Resolved in V7:** Q1–Q6 confirmed + built; the ADR-0023 end-to-end smoke is realized (SDK bot →
+dashboard, `sdk.spec.ts`); O-5 (UCI engine teardown) is handled in `UCIBot.run()`'s cleanup; O-7
+(version mismatch) surfaces a friendly `VERSION_UNSUPPORTED` error in `Bot._open`.
+
+**Carried:**
 - **O-1 (reference bots = house bots):** the SDK's `RandomBot`/`MinimaxBot` **mirror** the server's
   in-process house bots but are **not shared-imported** (ADR-0021 decoupling forbids the server
   importing the SDK). The "double as house bots" intent (ADR-0022) is satisfied at the logic/
@@ -292,5 +324,9 @@ JSON-Schema derivation of PROTOCOL.md (ADR-0021 follow-up). **No server schema/b
   does **not** replace them. Note the redundancy; don't collapse it in V7.
 - **O-7 (SDK versioning/compat):** the SDK sends `protocol_version` in `hello`; PROTOCOL §2 has the
   server advertise a range and reject `VERSION_UNSUPPORTED`. The SDK should surface a clear error on
-  version mismatch rather than a raw close. Wire a friendly message at impl.
-```
+  version mismatch rather than a raw close. Wire a friendly message at impl. **Done** — `Bot._open`
+  raises a friendly `ProtocolError` on `VERSION_UNSUPPORTED`.
+- **O-8 (initial-connect has no retry — new):** the run loop retries on *reconnect* (`_open_with_retry`,
+  §8) but the **first** connect does not — a newcomer who starts the bot before the server is reachable
+  gets an immediate error and reruns. A short initial-connect backoff would be a friendlier v1.x
+  ergonomic (the greeter/e2e flows are unaffected because the server is already up).

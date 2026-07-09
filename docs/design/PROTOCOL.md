@@ -246,3 +246,4 @@ S→ game_over {result:"white_wins", termination:"checkmate", pgn:"...", rating:
 - Exact numeric defaults (ping interval, liveness timeout, start-grace, seek TTL) are tunable — see QUESTIONS E8/C8-adjacent.
 - v1.x may add: SAN as an accepted **input** (still UCI-canonical, ADR-0007), per-time-control ratings, spectator-side protocol doc, and increment time controls (the `{base,increment}` model already supports it; increment path is dormant at MVP, ADR-0025 #6).
 - The authoritative machine-readable schema (JSON Schema) is a future artifact derived from this doc (ADR-0021 follow-up).
+- **Reference implementation (V7):** the `chessroom` Python SDK (`sdk/chessroom`) is the reference client conforming to this contract — it implements the handshake, seek, the in-game loop, `ply`-idempotency (§9), heartbeat pong (§10), and reconnect-resume (§8) from this spec only (no server code; ADR-0021). It's a good cross-check when reading the wire behavior.

@@ -74,8 +74,9 @@ down: ## Stop and remove all local containers
 down-clean: ## Like `down`, but also wipe the Postgres volume for a clean slate
 	$(COMPOSE) --profile demo down -v
 
-test: ## Fast gate: ruff + unit tests + svelte-check
+test: ## Fast gate: ruff + unit tests + svelte-check (server + SDK + frontend)
 	cd server && uv run ruff check . && uv run pytest tests/unit -q
+	cd sdk/chessroom && uv run ruff check . && uv run pytest -q
 	cd frontend && npm run check
 
 e2e: migrate ## Playwright smoke: dashboard → watch → replay (starts backend+frontend itself)
