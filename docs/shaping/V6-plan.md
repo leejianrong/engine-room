@@ -4,10 +4,24 @@ shaping: true
 
 # V6 Plan — Spectator UX (dashboard + lobby + catch-up + replay)
 
-**Status: 🚧 IN PROGRESS — decisions confirmed 2026-07-09 (§ Decisions confirmed).**
-Built on `feat/v6-spectator` off merged V5 (`b5e055b`, PR #12). Ground truth is the ADRs +
-[PROTOCOL.md](../design/PROTOCOL.md); where this plan and the docs disagree, **the code wins and the
-docs get updated** (CLAUDE.md, ADR-0015/0022, PROTOCOL spectator note).
+**Status: ✅ COMPLETE (2026-07-09).** Built in 7 sub-steps on `feat/v6-spectator` off merged V5
+(`b5e055b`, PR #12); all six open decisions confirmed up front (§ Decisions confirmed — Q1/Q2/Q3/Q5
+as ★, Q4 and Q6 owner-overridden). 15 new unit + 5 new integration tests + a Playwright smoke; full
+fast gate + integration suite + e2e green. Ground truth is the ADRs + [PROTOCOL.md](../design/PROTOCOL.md);
+where this plan and the docs disagree, **the code wins and the docs get updated** (CLAUDE.md,
+slices.md, ADR-0015/0022 updated for V6).
+
+**Deviations as built:** (a) the confirmed Q4 override (rated + persisted ambient) turned "no schema
+change" into a **data-only Alembic 0004** seeding `house-random-2`, added `with_for_update` row-locks
+to the V5 finalizer (D-g2), and made the `AmbientSupervisor` **evict finished ambient games from the
+registry** (unplanned) so `_games` stays bounded under the endless stream. (b) `GameLauncher.launch`
+now **returns its run_game task** so the supervisor can refill on game-end; the supervisor uses a
+**dedicated ambient launcher** with its own move delay (so ambient pacing is independent of the
+greeter's `house_move_delay`). (c) the SSE endpoint **short-circuits a finished-but-in-memory game**
+(snapshot + a synthesized `game_over`, then close) so a late SSE join can't hang. (d) the spectator
+`snapshot` carries `result`/`termination` (null while live) for that short-circuit. (e) frontend
+routing is `/` (lobby) + `/watch?game=<id>` query param (SPA fallback already configured), not a
+dynamic `[id]` route. Everything else matches the plan.
 
 Implementation plan for slice **V6** (Shape A, part A6). Higher levels: [slices.md](slices.md) (V6
 row), [shaping.md](shaping.md) (R's, Shape A, A6 in the A2–A7 thickening row).

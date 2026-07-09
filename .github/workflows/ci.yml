@@ -99,7 +99,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run e2e smoke
         working-directory: frontend
-        run: npm run test:e2e
+        run: npm run e2e
         env:
           ER_AMBIENT_GAMES: "2"
           ER_AMBIENT_MOVE_DELAY_SECONDS: "0.15"

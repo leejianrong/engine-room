@@ -22,7 +22,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 | **V3** ✅ | A3 | Two real user bots get matched by Elo in a 3+0 pool; same-owner bots never paired; a lonely seek expires | N3 matcher → pools |
 | **V4** ✅ | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
 | **V5** ✅ | A5 | Bots resign and agree draws; server auto-draws stalemate/insufficient/repetition; ratings move on FINISHED | N5/N8 outcomes |
-| **V6** | A6 | Anonymous visitor opens the dashboard, sees the live lobby, clicks a game, watches from the correct current state, replays from move 1 | N9/U1 spectator UX |
+| **V6** ✅ | A6 | Anonymous visitor opens the dashboard, sees the live lobby, clicks a game, watches from the correct current state, replays from move 1 | N9/U1 spectator UX |
 | **V7** | A7 | A newcomer `pip`-installs `chessroom`, runs the `uv` quickstart `RandomBot`, and is playing in minutes; UCI bridge points an engine at the platform | client → packaged SDK |
 
 **End-to-end smoke test** (PRD Testing Decisions) becomes meaningful once V2+V6+V7 exist (real signup → SDK run → watch on dashboard); it is authored against the demoable slice at that point.
@@ -142,6 +142,30 @@ unit + 6 integration tests added (pure Elo table, worker terminals, resign/draw 
 atomic rating write); the demo bot gains `--resign-after` and prints the rating change. All checks
 green.
 
-## V6–V7 — defined, breadboard deferred
+## V6 — Spectator UX
 
-Each is a real vertical slice ending in a demo (see slice map). Full affordance breadboards are produced in this doc when the slice is picked up, and its `V<n>-plan.md` follows. Coarse thickening targets are in [shaping.md → A2–A7](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc).
+**Status:** ✅ **complete** (2026-07-09). Built in 7 sub-steps (see [V6-plan.md](V6-plan.md)) on
+`feat/v6-spectator` off merged V5 (`b5e055b`, PR #12). Thickens **N9** (spectator SSE) and extends
+the **U1/U2** SvelteKit view. Adds a **catch-up snapshot** as the first SSE event
+(`Game.spectator_snapshot()` from `LiveState`, subscribe-before-read; the client dedups the join
+move by `ply`), a read REST surface (`GET /api/games` lobby = active-from-registry +
+last-20-finished-from-Postgres; `GET /api/games/{id}` replay/detail projecting one uniform
+`[{ply,san,uci,fen}]` list from `LiveState.moves` for a live game or the stored **PGN** for a
+finished one), the **rating change on the SSE `game_over`** event (V5 Q6), and **ambient Kind-1
+house-vs-house bots** (`AmbientSupervisor`, `house-random` vs a new `house-random-2`) that keep the
+lobby never-empty — **rated + persisted** via the normal launcher (owner override of the ★ unrated
+recommendation), respawn on finish, and are evicted from the in-memory registry when done; the V5
+finalizer now row-locks bot rows (`with_for_update`, fixed id order) so concurrent ambient
+finalizations never lose a rating update. The frontend splits into a **lobby** route (`/`, 3s poll)
+and a **watch** route (`/watch?game=<id>`) over a styled `lib/Board.svelte` + `ReplayControls.svelte`
+(live-follow vs scrub). Migration **0004** is a data-only house-bot seed (no DDL). A **Playwright
+smoke** e2e (dashboard → watch → replay) adopts Phase D (`make e2e` / CI `e2e` job). 15 new unit +
+5 new integration tests; full gate + integration suite + e2e smoke green.
+
+**End-to-end smoke test** (ADR-0023) is now realized as the V6 Playwright smoke.
+
+## V7 — defined, breadboard deferred
+
+A real vertical slice ending in a demo (see slice map). Full affordance breadboards are produced in
+this doc when the slice is picked up, and its `V7-plan.md` follows. Coarse thickening targets are in
+[shaping.md → A2–A7](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc).

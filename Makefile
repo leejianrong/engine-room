@@ -71,4 +71,4 @@ test: ## Fast gate: ruff + unit tests + svelte-check
 
 e2e: migrate ## Playwright smoke: dashboard → watch → replay (starts backend+frontend itself)
 	cd frontend && npm ci && npx playwright install chromium && \
-		ER_AMBIENT_MOVE_DELAY_SECONDS=0.15 npm run test:e2e
+		ER_AMBIENT_MOVE_DELAY_SECONDS=0.15 npm run e2e
