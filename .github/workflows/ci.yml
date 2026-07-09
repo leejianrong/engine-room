@@ -34,6 +34,19 @@ jobs:
           enable-cache: true
       - run: uv run --frozen pytest tests/unit -q
 
+  sdk:
+    runs-on: ubuntu-latest # chessroom SDK: its own decoupled uv project (V7)
+    defaults:
+      run:
+        working-directory: sdk/chessroom
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen pytest -q
+
   integration:
     runs-on: ubuntu-latest # runner has Docker → testcontainers Postgres
     defaults:

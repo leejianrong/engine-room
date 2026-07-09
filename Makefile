@@ -15,7 +15,7 @@ HOUSE_DELAY := ER_HOUSE_MOVE_DELAY_SECONDS=0.5
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install db migrate backend frontend dev mint bot demo up down test
+.PHONY: help install db migrate backend frontend dev mint bot sdk-bot demo up down down-clean test
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -54,6 +54,12 @@ mint: ## Mint a fresh local bot API key (prints it)
 bot: ## Start random-mover games vs the house and print the watch URL (needs a running stack)
 	cd server && uv run python -m engine_room.devtools.demo_bot --loop
 
+sdk-bot: ## Run the SDK quickstart RandomBot vs the house (mints a key; needs a running stack)
+	@echo "Minting a local key and starting the quickstart RandomBot via the chessroom SDK…"
+	@KEY=$$(cd server && uv run python -m engine_room.devtools.mint_bot --quiet) && \
+	  cd sdk/quickstart && uv sync --quiet && \
+	  CHESSROOM_KEY=$$KEY CHESSROOM_URL=ws://localhost:8001/api/bot/v1 uv run python random_bot.py
+
 demo: ## One command: db + backend + frontend + a looping bot, all in Docker
 	@echo "Building & starting the whole platform + a demo bot…"
 	@echo "When it's up, open http://localhost:5174 and use the game URL from the demo-bot logs."
@@ -65,8 +71,12 @@ up: ## Whole platform in Docker (no bot)
 down: ## Stop and remove all local containers
 	$(COMPOSE) --profile demo down
 
-test: ## Fast gate: ruff + unit tests + svelte-check
+down-clean: ## Like `down`, but also wipe the Postgres volume for a clean slate
+	$(COMPOSE) --profile demo down -v
+
+test: ## Fast gate: ruff + unit tests + svelte-check (server + SDK + frontend)
 	cd server && uv run ruff check . && uv run pytest tests/unit -q
+	cd sdk/chessroom && uv run ruff check . && uv run pytest -q
 	cd frontend && npm run check
 
 e2e: migrate ## Playwright smoke: dashboard → watch → replay (starts backend+frontend itself)

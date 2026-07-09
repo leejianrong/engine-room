@@ -20,3 +20,10 @@ The SDK and quickstart need a packaging/run story. The primary user is the AI/CS
 - Positive: fastest zero-to-first-move for the student; reproducible without Docker; the optional `Dockerfile` still serves the advanced/UCI-bridge persona (ADR-0021) and users mirroring a cloud deploy target — which aligns with ADR-0023's secondary-user ordering.
 - Negative / costs: two supported run modes to document (keep the container clearly labeled "optional/advanced").
 - Follow-on questions opened: none blocking (container base image + whether to publish it are build-time details).
+
+## Addendum (2026-07-09, V7): realized as specified
+The SDK and quickstart ship **`uv` + `pyproject.toml` + `uv.lock`**. The hero path is
+`git clone → uv sync → uv run python random_bot.py` — no container. The **optional/advanced**
+container is a `Dockerfile` in `sdk/quickstart`, clearly labeled optional (with a build-context note
+while the SDK is path-installed pre-PyPI). `make sdk-bot` wires the whole flow. Matches this ADR
+exactly. See docs/shaping/V7-plan.md.

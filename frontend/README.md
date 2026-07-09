@@ -1,22 +1,25 @@
 # Engine Room — frontend
 
-SvelteKit + Vite spectator UI. Static SPA build (`@sveltejs/adapter-static`, SSR off) —
-the UI subscribes to the backend SSE stream at runtime (cross-origin; the backend
-enables CORS for the dev server). See [../docs/shaping/V1-plan.md](../docs/shaping/V1-plan.md)
-for the current slice; the live board + lobby are built out in V6.
+SvelteKit + Vite spectator UI (V6). Static SPA build (`@sveltejs/adapter-static`, SSR off) —
+the UI polls `GET /api/games` for the lobby and subscribes to the backend SSE stream while
+watching (cross-origin; the backend enables CORS for the dev server).
 
 ```bash
 npm install
 npm run dev      # http://localhost:5174
 npm run build    # -> build/  (static)
 npm run check    # svelte-check
+npm run e2e      # Playwright smokes (needs a built/served stack; see `make e2e`)
 ```
 
 Backend base URL defaults to `http://localhost:8001`; override with `VITE_API_BASE`.
 
-## Watch a live game (V1 demo)
+Routes: `/` is the **dashboard/lobby** (live + recently-finished games); `/watch?game=<id>` is the
+**watch** page (catch-up snapshot → live SSE tail, replay controls). Browser e2e lives in `e2e/`.
 
-1. Backend + Postgres running (see `../server/README.md`).
-2. Start a bot so a game begins vs the house bot; note its `game_id`.
-3. Open `http://localhost:5174/?game=<game_id>` (or paste the id into the input)
-   and watch the board update move-by-move.
+## Watch a live game
+
+1. Backend + Postgres running (see `../server/README.md`), or just `make dev` from the repo root.
+2. Open `http://localhost:5174/` — the lobby lists live games (ambient house-vs-house games keep it
+   populated). Start your own with `make sdk-bot` from the repo root.
+3. Click a game to watch from the current position and replay it from move 1.

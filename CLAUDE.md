@@ -14,7 +14,7 @@ where they disagree, and update the docs.
 | **V4 resilience** | ✅ done — reconnect-resume the same seat (`welcome.active_game`, seat-owned durable inbox rebound to the new session, re-sent `your_turn`; clock runs while away — ADR-0025 #3, no reconnect window); `ply`-idempotency (dup re-ack / stale ignore / future INVALID_PLY, PROTOCOL §9); illegal/unparseable move on your turn → **instant forfeit** (`illegal_move`, ADR-0016 B7); heartbeat ping/pong (`ER_HB_*`, 10s/30s) → **mutual-abandonment ABORT** (both seats gone, no result/rating; a lone drop flags on its clock); missed `game_over` delivered on reconnect (D-vi). `GameRegistry` bot→active-game index; `LiveState` on `Game`. No schema change |
 | **V5 outcomes & ratings** | ✅ done — `resign`/`draw_offer`/`draw_accept` control messages (§7) route to a per-game control channel the loop always watches (arrive off-turn safely); resign → `resignation` (opponent wins); draw offer surfaced via `your_turn.opponent_draw_offer` (a move implicitly declines, ADR-0016 D6) + `draw_accept` → `agreement`; server **auto-draws** all standard conditions incl. claimable threefold/fifty via `board.outcome(claim_draw=True)` (D8, no claim protocol); **timeout vs insufficient material → DRAW** (D7); **real Elo** (K=32 provisional <30 games / K=16, `ER_ELO_*`) computed + `bots.rating`/`games_played` + per-color `games` rating cols all written in ONE finalize txn (ADR-0025 #5); `game_over.rating` carries real {before,after}; ABORTED still writes no rating. Migration **0003** (first since 0002). House games rate both bots uniformly |
 | **V6 spectator UX** | ✅ done — anonymous lobby `GET /api/games` (active from the in-memory registry + last-20 finished from Postgres) polled by a SvelteKit dashboard; **catch-up snapshot** as the first SSE event (`Game.spectator_snapshot()` from `LiveState`, subscribe-before-read; client dedups the join move by `ply`); **replay from move 1** over one uniform `[{ply,san,uci,fen}]` list — live from `LiveState.moves`, finished from the stored PGN via `GET /api/games/{id}`; **styled board** (`lib/Board.svelte`) + watch route (`/watch?game=`) with live-follow/scrub replay controls; **rating change on the SSE `game_over`** (Q6); **ambient Kind-1 house-vs-house bots** (`AmbientSupervisor`, `house-random` vs `house-random-2`) keep the lobby never-empty — **rated + persisted** via the normal launcher, respawn on finish, evicted from the registry when done; row-locked finalizer (`with_for_update`) under concurrent ambient finalize. Migration **0004** (data-only house-bot seed). Playwright smoke e2e (dashboard→watch→replay) adopted (Phase D) |
-| Packaged `chessroom` SDK + UCI bridge (separate repo) | ❌ V7 — V1's client is `tests/support/fake_client.py` |
+| **V7 hero onboarding** | ✅ done — packaged **`chessroom` SDK** (`sdk/chessroom`, own `uv`/pyproject, **zero `engine_room` imports** — decoupled by the wire contract, ADR-0021, AST-boundary-tested): subclass `Bot` + implement `choose_move(board)`, call `run()`; the run loop (extracted from `devtools/demo_bot`) hides the whole protocol — handshake, auto-seek, `your_turn`→`move`→`move_ack`, heartbeat pong (§10), `ply`-idempotent resend (§9), reconnect-resume (§8); `choose_move` may return `RESIGN`/`ACCEPT_DRAW` (§7). Reference bots `RandomBot`/`MinimaxBot` (mirror the house bots' logic, not shared-imported); **UCI bridge** `UCIBot` + `chessroom-uci` console script (points Stockfish at the platform, client-side). **`uv` quickstart template** (`sdk/quickstart`: `random_bot.py` + `.env.example` + README + optional Dockerfile) — `git clone → uv sync → paste key → uv run → playing`; `make sdk-bot` runs it. Config via `CHESSROOM_KEY`/`CHESSROOM_URL`. Tests: SDK unit over an in-memory fake transport, a live-server contract test (packaged SDK vs the real server, incl. real reconnect + persistence), and an **SDK-fed Playwright e2e** (the ADR-0023 signup→SDK→watch smoke, now real). **Monorepo-package-first**; standalone-repo split + PyPI publish deferred (V7 O-2). No schema change |
 
 Design is fully specified; see **docs/** (below). The build is sliced V1–V7 (Shape A,
 walking-skeleton-first) in `docs/shaping/`.
@@ -27,6 +27,7 @@ walking-skeleton-first) in `docs/shaping/`.
 ```
 server/      FastAPI app (engine_room/), Alembic, tests/{unit,integration,support}
 frontend/    SvelteKit spectator UI
+sdk/         chessroom/ (packaged Python SDK, decoupled uv project) + quickstart/ (V7)
 docs/        design/ (REQS, CONTEXT, PRD, PROTOCOL, QUESTIONS), adr/, shaping/
 docker-compose.yml   local Postgres on host :5433
 ```
@@ -36,7 +37,8 @@ docker-compose.yml   local Postgres on host :5433
 **Shortcuts (Makefile):** `make demo` = whole platform + a looping demo bot in Docker (one
 command to watch a live game); `make dev` = db + backend + frontend with hot reload, then
 `make bot` (another terminal) to start a game; `make mint` prints a real `crbk_` key; `make test`
-= fast gate. `make help` lists all targets. The raw steps below are what they wrap.
+= fast gate; `make down` stops the stack (`make down-clean` also wipes the Postgres volume for a
+clean slate). `make help` lists all targets. The raw steps below are what they wrap.
 
 ```bash
 # once per clone (installs the fast pre-push gate)
@@ -66,9 +68,14 @@ avoid collisions). Frontend → backend is **cross-origin via CORS** (see `confi
 - `tests/integration/` — needs Docker: an ephemeral Postgres via **testcontainers**. CI + local-with-Docker.
 - Shared helpers (the fake protocol client — the **primary WS test seam**, PRD Option A) live in
   `tests/support/`.
-- Playwright browser e2e landed in **V6** (`frontend/e2e/`, `make e2e` / CI `e2e` job): one
+- Playwright browser e2e landed in **V6** (`frontend/e2e/`, `make e2e` / CI `e2e` job): a
   smoke test (dashboard → watch → replay) that Playwright drives against a self-started
-  backend+frontend (DB must be up + migrated). Phase D adopted.
+  backend+frontend (DB must be up + migrated). Phase D adopted. **V7** adds `e2e/sdk.spec.ts` — the
+  ADR-0023 flow (mint a key → run the SDK's quickstart bot → watch it on the dashboard).
+- `sdk/chessroom/tests/` — the **SDK's own** fast unit tests (no infra): the run loop over an
+  in-memory fake transport + an import-boundary check. Its own `uv` project → a dedicated CI `sdk`
+  job + pre-push line; `make test` runs it too. The packaged SDK is *also* run against the real
+  server in `server/tests/integration/test_v7_sdk_live.py` (the contract test, needs Docker).
 
 ## Workflow conventions
 

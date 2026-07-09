@@ -8,6 +8,9 @@ repo_root="$(git rev-parse --show-toplevel)"
 echo "pre-push ▸ backend: ruff + unit tests"
 ( cd "$repo_root/server" && uv run ruff check . && uv run pytest tests/unit -q )
 
+echo "pre-push ▸ sdk: ruff + unit tests"
+( cd "$repo_root/sdk/chessroom" && uv run ruff check . && uv run pytest -q )
+
 echo "pre-push ▸ frontend: svelte-check"
 ( cd "$repo_root/frontend" && npm run check )
 
