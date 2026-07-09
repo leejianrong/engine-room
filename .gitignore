@@ -1,5 +1,7 @@
 # Local Claude Code settings (machine-specific)
 .claude/settings.local.json
+# Transient Claude Code agent worktrees (isolation: "worktree")
+.claude/worktrees/
 
 # Python
 __pycache__/
