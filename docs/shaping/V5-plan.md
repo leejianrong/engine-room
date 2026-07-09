@@ -82,8 +82,11 @@ Two hard points:
 | D-h | **ABORTED writes no rating (unchanged).** The finalizer returns `None` for an aborted game; `game_over.rating` is omitted (already true in `_terminal_game_over`, and `run_game`'s aborted path sends no per-seat rating). | ADR-0010/0011/0016: an aborted game has no fair result. Keep it. |
 | D-i | **MVP scope held:** single process, no Redis; Blitz only (3+0/5+0); ports :8001/:5174/:5433; frontend↔backend CORS. **Single global rating per bot** (per-time-control deferred, E8). No rate limits / griefing cooldowns (V-later). Dashboard/lobby/catch-up/replay/ambient house bots stay **V6**; SDK/UCI stay **V7**. | R5 / E8; unchanged from V1–V4. |
 
-### Decisions to confirm (before implementing)
-These are put to the owner up front; recommendations are marked ★.
+### Decisions confirmed (2026-07-09)
+The owner confirmed **all ★ recommendations**: Q1 K=32/16, init 1200, single global rating; Q2 four
+nullable `games` rating cols + `bots.games_played`; **Q3 rate both bots uniformly** (house included);
+Q4 offer any time, surfaced on the recipient's next `your_turn`; Q5 **defer** anti-rematch refinement
+(keep at pairing); Q6 SSE `game_over` unchanged.
 
 | # | Question | Options / recommendation |
 |---|----------|--------------------------|

@@ -69,12 +69,36 @@ class Pong(BaseModel):
     t: int = 0
 
 
+# --- V5 control messages (PROTOCOL §7): non-move frames a bot may send. Unlike
+# `move`, these can arrive when it is NOT the sender's turn, so the endpoint
+# routes them to a per-game control channel the loop always watches (not the
+# move-only seat inbox). A draw offer may also piggyback on `Move.offer_draw`. ---
+
+
+class Resign(BaseModel):
+    type: Literal["resign"]
+    game_id: str
+
+
+class DrawOffer(BaseModel):
+    type: Literal["draw_offer"]
+    game_id: str
+
+
+class DrawAccept(BaseModel):
+    type: Literal["draw_accept"]
+    game_id: str
+
+
 _CLIENT_MODELS: dict[str, type[BaseModel]] = {
     "hello": Hello,
     "seek": Seek,
     "seek_cancel": SeekCancel,
     "move": Move,
     "pong": Pong,
+    "resign": Resign,
+    "draw_offer": DrawOffer,
+    "draw_accept": DrawAccept,
 }
 
 
