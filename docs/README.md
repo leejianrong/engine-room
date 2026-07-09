@@ -29,8 +29,8 @@ Dev process: [DEVELOPER-WORKFLOWS.md](DEVELOPER-WORKFLOWS.md) (the playbook) ·
 |-----|------------|
 | [frame.md](shaping/frame.md) | The "why" of the build plan: source, problem, outcome. |
 | [shaping.md](shaping/shaping.md) | Working doc: build requirements (R0–R7), slicing strategies (A/B/C), fit check, selected Shape A + A1 breadboard. |
-| [slices.md](shaping/slices.md) | Slice map V1–V7; V1 fully specced, V2–V7 breadboarded just-in-time. |
-| [V1-plan.md](shaping/V1-plan.md) | Individual implementation plan for slice V1 (the skeleton thread). |
+| [slices.md](shaping/slices.md) | Slice map V1–V7 — **all built**; each slice was breadboarded just-in-time when picked up. |
+| [V1-plan.md](shaping/V1-plan.md) … [V7-plan.md](shaping/V7-plan.md) | Per-slice implementation plans (goal, decisions, sub-steps, deviations-as-built). One per slice: [V1](shaping/V1-plan.md), [V2](shaping/V2-plan.md), [V3](shaping/V3-plan.md), [V4](shaping/V4-plan.md), [V5](shaping/V5-plan.md), [V6](shaping/V6-plan.md), [V7](shaping/V7-plan.md). |
 
 ## Reading order
-New here? **REQS → CONTEXT → PRD → PROTOCOL**, dipping into **adr/** for any "why". To see the build plan: **shaping/frame → shaping → slices → V1-plan**.
+New here? **REQS → CONTEXT → PRD → PROTOCOL**, dipping into **adr/** for any "why". To see the build plan: **shaping/frame → shaping → slices**, then the per-slice **V1-plan … V7-plan**.

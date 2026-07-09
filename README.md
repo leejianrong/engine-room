@@ -2,7 +2,7 @@
 
 A real-time matchmaking and spectating platform for **AI chess bots** — think "Chess.com for bots." Humans register bots; bots connect outward over a WebSocket to be matched by Elo and play **bot-vs-bot** games that anyone can watch live in the browser.
 
-> **Status:** early build. The product design is fully specified (25 ADRs + wire protocol + PRD); implementation is underway on the MVP, sliced into V1–V7. **V1 (the walking-skeleton game thread) is in progress** — see [docs/shaping/V1-plan.md](docs/shaping/V1-plan.md).
+> **Status:** MVP complete. All seven slices are built and merged — **V1** walking skeleton, **V2** GitHub identity + bot keys, **V3** Elo matchmaking, **V4** resilience (reconnect/idempotency/heartbeat), **V5** outcomes + real ratings, **V6** spectator UX (lobby/catch-up/replay/ambient bots), and **V7** the packaged `chessroom` SDK + `uv` quickstart + UCI bridge. Deployed on Fly.io at **https://engine-room.fly.dev**. See the [build plan](docs/shaping/slices.md) and per-slice plans in [docs/shaping/](docs/shaping/).
 
 ## What it does (MVP / demoable slice)
 
@@ -20,6 +20,7 @@ Full scope, non-goals, and the 76 user stories are in the [PRD](docs/design/PRD.
 engine-room/
   server/      FastAPI + Postgres backend (uv)          -> server/README.md
   frontend/    SvelteKit spectator UI (Vite, static SPA) -> frontend/README.md
+  sdk/         chessroom SDK + uv quickstart template     -> sdk/chessroom/README.md, sdk/quickstart/README.md
   docs/        design, decisions, and the build plan     -> docs/README.md
   docker-compose.yml   local Postgres (host port 5433)
 ```
@@ -44,7 +45,7 @@ Start at the **[docs index](docs/README.md)**. The key documents:
 
 - **Backend:** Python, FastAPI, SQLAlchemy 2.0 (async) + Alembic, Postgres, `python-chess`; packaged with `uv`.
 - **Frontend:** TypeScript, SvelteKit + Vite (static SPA, SSE-driven).
-- **Bot SDK:** `chessroom` Python package — a *separate* repo (depends only on the versioned protocol spec, ADR-0021); not in this repo.
+- **Bot SDK:** `chessroom` Python package at [`sdk/chessroom`](sdk/chessroom/) — a decoupled `uv` project that depends only on the versioned protocol spec, never on server code (ADR-0021, enforced by an import-boundary test). It currently lives in this monorepo; the standalone-repo split + PyPI publish are deferred (V7 O-2).
 
 ## Try it out — watch a live match (one command)
 
@@ -52,16 +53,43 @@ Start at the **[docs index](docs/README.md)**. The key documents:
 make demo        # builds & runs db + backend + frontend + a looping demo bot (all in Docker)
 ```
 
-Then open **http://localhost:5174** and paste the `game_…` id from the `demo-bot` logs
-(`Watch it here: …`) into the box — the board updates move-by-move. `make down` stops everything.
+Open **http://localhost:5174** — the **dashboard** shows a live lobby (ambient house-vs-house
+games keep it populated even with no real bots). Click any game to watch it from the current
+position and scrub the replay from move 1. `make down` stops everything (`make down-clean` also
+wipes the Postgres volume for a clean slate).
 
-Why a demo bot at all? There's **no lobby yet** (that's V6), and bots are external clients that
-connect *to* the platform — so a match only exists once a bot seeks one. The demo bot
-(`engine_room.devtools.demo_bot`) is a throwaway stand-in for the future `chessroom` SDK: it
-mints a real API key, seeks a game (matched to a real opponent if one is queued, else the house
-greeter), and prints the `game_id` to spectate. It plays **minimax + alpha-beta** (`--engine
-random` for dumb moves) and pauses briefly before each move so you can follow along; the house
-side is paced by `ER_HOUSE_MOVE_DELAY_SECONDS` (set to 0.5s locally, 0 in production).
+## Write and run your own bot (the hero path)
+
+Bots are external clients that connect *to* the platform, using the **`chessroom` SDK**: you
+subclass `Bot`, implement `choose_move(board)` (a `python-chess` board), and call `run()` — the SDK
+handles the WebSocket, matchmaking, clocks, reconnects, and the wire protocol. The
+[`sdk/quickstart`](sdk/quickstart/) template is the newcomer path:
+
+```bash
+make dev                              # terminal 1: db + backend + frontend (hot reload)
+
+make sdk-bot                          # terminal 2: mints a key + runs the SDK's quickstart
+                                      #   RandomBot vs the house — appears live on the dashboard
+```
+
+To feel the real newcomer flow (what the quickstart README walks through):
+
+```bash
+cd sdk/quickstart
+cp .env.example .env                  # paste a key from `make mint`; uncomment CHESSROOM_URL for local
+uv sync
+uv run python random_bot.py
+```
+
+Point an existing UCI engine at the platform instead:
+
+```bash
+cd sdk/chessroom
+CHESSROOM_KEY=crbk_... uv run chessroom-uci --engine /path/to/stockfish
+```
+
+There's also `make bot` — the older dev demo client (`engine_room.devtools.demo_bot`, minimax,
+raw websockets) that predates the SDK; the SDK is the supported way to write a bot.
 
 ## Local development
 
@@ -71,14 +99,19 @@ to see every target.
 ```bash
 make install     # once per clone: uv sync + npm install
 make dev         # db + backend + frontend, all with hot reload (Ctrl-C stops)
-make bot         # in another terminal: start games vs the house + print the watch URL
-make mint        # just print a fresh bot API key (crbk_…) to use with your own client
-make test        # fast gate: ruff + unit tests + svelte-check
+make sdk-bot     # in another terminal: run the SDK quickstart RandomBot vs the house
+make bot         # older dev demo bot vs the house (prints a watch URL)
+make mint        # just print a fresh bot API key (crbk_…)
+make test        # fast gate: ruff + unit tests + svelte-check (server + SDK + frontend)
+make e2e         # Playwright smokes: dashboard→watch→replay, and the SDK-fed onboarding flow
+make down        # stop containers (keeps the DB volume)
+make down-clean  # stop containers AND wipe the Postgres volume (clean slate)
 ```
 
 `make dev`/`make demo` wrap the raw steps (`docker compose up -d db`, `alembic upgrade head`,
 `uvicorn --reload --port 8001`, `npm run dev`); run them by hand if you prefer (see the Makefile,
-`server/README.md`, `frontend/README.md`).
+`server/README.md`, `frontend/README.md`). `make sdk-bot`/`make bot`/`make e2e` need a running
+stack (start `make dev` first — except `make e2e`, which starts its own).
 
 ## License
 

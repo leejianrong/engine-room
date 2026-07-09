@@ -1,6 +1,7 @@
 # Engine Room — server
 
-FastAPI + Postgres backend. See [../docs/shaping/V1-plan.md](../docs/shaping/V1-plan.md) for the current slice.
+FastAPI + Postgres backend (V1–V7 complete). See [../CLAUDE.md](../CLAUDE.md) for the build-status
+map and [../docs/shaping/](../docs/shaping/) for the per-slice plans.
 
 ## Develop
 
@@ -19,8 +20,11 @@ uv run alembic upgrade head
 uv run uvicorn engine_room.app:app --reload --port 8001
 # -> http://127.0.0.1:8001/health
 
-# Tests (fake-protocol-client WS seam)
-uv run pytest
+# Tests — layered by cost (see ../docs/DEVELOPER-WORKFLOWS.md)
+uv run pytest tests/unit -q          # fast, no infra (in-process ASGI / live-uvicorn-no-DB)
+uv run pytest tests/integration -q   # needs Docker: ephemeral Postgres via testcontainers
+uv run pytest                        # everything
 ```
 
+Shared test helpers (the fake protocol client — the primary WS test seam) live in `tests/support/`.
 Config via `ER_`-prefixed env vars (see `.env.example`).
