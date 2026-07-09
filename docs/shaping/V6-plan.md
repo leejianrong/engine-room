@@ -356,3 +356,8 @@ animations → polish · a broad Playwright suite (only a single smoke test is i
   F3) is the scale path.
 - **O-7 (D-g2 lock scope):** `with_for_update()` serializes rating writes correctly within Postgres;
   it does not exist on the DB-free house-direct path (no session) — fine, that path doesn't rate.
+- **O-8 (ambient shutdown noise):** `AmbientSupervisor.stop()` cancels in-flight `run_game` tasks,
+  which logs benign `asyncio` "Task was destroyed but it is pending" warnings (the loop's inner
+  `controls.get()`/`request_move` awaits aren't drained on external cancellation). Harmless (only on
+  shutdown/teardown, no correctness impact); a tidy fix would give `run_game` a cancellation cleanup
+  path. Deferred.

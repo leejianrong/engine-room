@@ -82,7 +82,8 @@ async def test_ambient_games_persist_rate_and_respawn(session_factory):
 
     # No lost rating write (D-g2): each finished game incremented BOTH house bots
     # exactly once, even though they finalize concurrently sharing the same rows.
+    # (This is the deterministic guarantee — the *direction* of a rating move is
+    # outcome-dependent: a draw between two equal 1200 bots leaves both at 1200,
+    # so asserting the rating changed would be flaky.)
     assert a.games_played == total
     assert b.games_played == total
-    # Ratings actually moved off the 1200 seed at least once.
-    assert a.rating != 1200 or b.rating != 1200
