@@ -1,0 +1,18 @@
+[project]
+name = "engine-room-quickstart"
+version = "0.1.0"
+description = "Quickstart: your first Engine Room chess bot"
+requires-python = ">=3.10"
+dependencies = [
+    "chessroom",
+    "python-dotenv>=1.0",
+]
+
+# During V7 the SDK lives in the Engine Room monorepo, so the quickstart installs
+# it by path (ADR-0022: depend on the package, don't vendor it). Once chessroom is
+# published to PyPI (V7 O-2), delete this block and pin a version in dependencies.
+[tool.uv.sources]
+chessroom = { path = "../chessroom" }
+
+[tool.uv]
+package = false
