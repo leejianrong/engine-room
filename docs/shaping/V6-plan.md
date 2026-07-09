@@ -4,7 +4,7 @@ shaping: true
 
 # V6 Plan — Spectator UX (dashboard + lobby + catch-up + replay)
 
-**Status: 🚧 DRAFTING — awaiting owner sign-off on the open decisions (§ Decisions to confirm).**
+**Status: 🚧 IN PROGRESS — decisions confirmed 2026-07-09 (§ Decisions confirmed).**
 Built on `feat/v6-spectator` off merged V5 (`b5e055b`, PR #12). Ground truth is the ADRs +
 [PROTOCOL.md](../design/PROTOCOL.md); where this plan and the docs disagree, **the code wins and the
 docs get updated** (CLAUDE.md, ADR-0015/0022, PROTOCOL spectator note).
@@ -32,8 +32,9 @@ Concretely:
 - **Ambient house bots** (ADR-0022 Kind-1) — a small number of house-vs-house games so the lobby is
   never empty for a first-time visitor; they **respawn** when they finish.
 
-Stays single-process / in-memory for live state (R5); **no schema change** (V6 is the view layer +
-the ambient-bot feeder — see § Schema). No new game-rules/rating behavior (that was V5).
+Stays single-process / in-memory for live state (R5). The **only** durable change is a data-only
+Alembic `0004` seeding a second house-bot identity (D-h) — **no DDL / no new columns**. No new
+game-rules/rating behavior (that was V5); V6 is the view layer + the ambient-bot feeder.
 
 ## What thickens (A6 → V6)
 Per [shaping.md A2–A7 table](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc):
@@ -85,23 +86,24 @@ Three hard points:
 | D-d | **Replay/detail = `GET /api/games/{id}` returning the uniform game view** for BOTH live and finished games. Source resolution: if the game is in the `GameRegistry` with live state → project from `LiveState`; else → load the `games` row from Postgres and **parse the PGN** (python-chess) into `[{ply,san,uci,fen}]` with `initial_fen = game.board().fen()`. Payload: `{game_id, state, white{name,rating,bot_id}, black{…}, time_control, initial_fen, moves[], result, termination, final_fen, rating:{white:{before,after}, black:{…}}?}`. | One endpoint, one client replay model over two storage backends. Finished games survive a server restart (Postgres); live games (and finished-still-in-memory) come from the registry. The client never needs a chess engine — the server emits per-ply FEN. |
 | D-e | **Lobby = `GET /api/games` merging two sources.** Active/paired games from the in-memory `GameRegistry` (a new `list_active()` accessor); recently-finished from Postgres (`ORDER BY finished_at DESC LIMIT N`). Each entry: `{game_id, state, white{name,rating}, black{name,rating}, time_control, ply, to_move, started_at}` (+ `result`/`termination` for finished). Poll interval **3s** (client), cap **N=20** finished. | Active state only exists in memory (ADR-0020); finished games are canonical in Postgres and survive restart (and give a stable `finished_at` ordering). Splitting by state avoids double-listing a just-finished game. Poll (not a lobby SSE) is the ADR-0015 F3 MVP choice — simplest, good-enough for a low-traffic lobby. |
 | D-f | **SSE `game_over` carries the rating change (Q6 realized).** The worker publishes `rating: {white:{before,after}, black:{before,after}}` on the `game_over` event when the finalizer returned a `FinalizeResult` (omitted for ABORTED / unrated / DB-free). The bot-facing per-seat `game_over.rating` is unchanged. | V6 is where the lobby/watch UI needs it; the worker already holds the `FinalizeResult`. No new computation — just fan it out to spectators too. |
-| D-g | **Ambient house games are created OUTSIDE the matcher, are NOT persisted, and are NOT rated.** A background `AmbientSupervisor` (started in the lifespan) maintains `ER_AMBIENT_GAMES` live house-vs-house games in the 3+0 pool: whenever the live count < N it creates a `Game` with two in-process house identities and launches it with **`finalizer=None`** and a watchable move delay; when one finishes it respawns. | Meets the *never-empty-lobby* guarantee (ADR-0022 Kind-1) with **zero schema change and zero rating drift**: no DB row, no `bots.rating` touch. Created directly (not via a pool ticket) so they never interfere with real pairing / same-owner / anti-rematch. Bounded + self-healing. |
-| D-h | **A second in-process house identity `house-random-2`** (`bot_house_random_2`, same `RandomBot` mover) is constructed in-memory for the ambient opponent. **No `bots` row / migration** — ambient games aren't finalized, so no FK is written. | House-vs-*house* needs two distinct `BotInfo` ids (for `color_of` / snapshot / distinct names in the lobby). Since ambient games never hit the DB, an in-memory identity suffices — keeps V6 schema-free (D-i). |
-| D-i | **No schema change.** Lobby finished-list + replay both read existing `games` columns (`pgn`, `result`, `termination`, `final_fen`, `*_name`, `*_bot_id`, `*_rating_*`, `finished_at`, `base/increment_seconds`); ambient games are not persisted; the SSE rating comes from the in-flight `FinalizeResult`. | V6 is a pure view layer + ephemeral feeder. Nothing new is durable. (First slice since V1 with no Alembic migration — V2 `0002`, V5 `0003` stand.) |
+| D-g | **Ambient house games are created OUTSIDE the matcher but launched through the normal `GameLauncher` (finalizer included) — so they ARE persisted and rated (Q4 confirmed).** A background `AmbientSupervisor` (started in the lifespan) maintains `ER_AMBIENT_GAMES` live house-vs-house games in the 3+0 pool: whenever the live count < N it creates a `Game` with two seeded house identities and calls `launcher.launch(game)` with a watchable move delay; when one finishes it respawns. | Meets the *never-empty-lobby* guarantee (ADR-0022 Kind-1) and matches ADR-0022's main text (house bots "rated normally, occupy the leaderboard"). Reuses the exact real-game launch path (game_start fan-out + persistence + Elo). Created directly (not via a pool ticket) so they never interfere with real pairing / same-owner / anti-rematch. Bounded + self-healing. House rating drift is accepted (O-1). |
+| D-g2 | **The finalizer loads each bot `with_for_update()` (row lock) before the SELECT-then-UPDATE rating write.** | Ambient games share the two house identities and finish frequently, so two finalize txns can now touch the same `bots` row concurrently — an un-locked read-modify-write could lose a rating update. A `SELECT … FOR UPDATE` serializes them. Low-risk hardening of the V5 finalizer, made live by D-g. |
+| D-h | **A second house identity `house-random-2`** (`bot_house_random_2`, same `RandomBot` mover, rating 1200) is **seeded as a real `bots` row** (Alembic `0004`, data-only) so the ambient games' FKs resolve — mirroring how `0002` seeded `bot_house_random`. | House-vs-*house* needs two distinct `BotInfo` ids; since ambient games are now finalized (D-g), the opponent needs a persistent identity for `games.black_bot_id` FK integrity. |
+| D-i | **One data-only migration (Alembic `0004`) — no DDL.** It seeds the `house-random-2` `bots` row (D-h). Lobby finished-list + replay read existing `games`/`bots` columns; the SSE rating comes from the in-flight `FinalizeResult`. | V6 adds no *columns/tables* — only a seed row, following the V2 `0002` house-seed precedent. (`0002`, `0003` stand; `0004` is a seed.) |
 | D-j | **Frontend: two SPA routes over a shared styled board component.** `/` = lobby (polls `GET /api/games`, clickable cards of live games incl. ambient); `/watch?game=<id>` = watch (SSE catch-up + live tail for live games; `GET /api/games/{id}` for finished) with **replay controls** (⏮ ◀ ▶ ⏭ + a ply slider + play/pause) scrubbing the accumulated move list. A `lib/Board.svelte` renders a **styled CSS board** (coordinates, light/dark theme, last-move highlight) using unicode glyphs — self-contained, **no external CDN/lib** (ADR-0017 / CSP). `lib/api.ts` centralizes `API_BASE` + fetch/EventSource helpers. | Minimal routing that works with the existing SvelteKit static-SPA setup (`ssr=false`); a query param avoids dynamic-route/prerender fuss (verify adapter `fallback` at impl). Extends V1's view (D-b) rather than replacing it; the glyph board is already legible — V6 styles it properly, keeping an inline SVG piece set as later polish. |
 | D-k | **MVP scope held:** single process, no Redis; Blitz only (3+0/5+0); ports :8001/:5174/:5433; frontend↔backend CORS. Spectating stays **anonymous, read-only** (ADR-0015 F6). SDK/UCI stay **V7**. **Bot-management UI is OUT of V6** (kept a later-polish item — the V2 REST exists; a browser UI for create-bot/see-key/list-your-bots is not on the A6 critical path and pulls in auth-in-the-browser). | R5 / ADR-0023 MVP scope; unchanged from V1–V5. Keeps V6 to the spectator thread the slice is named for. |
 
-### Decisions to confirm (owner sign-off before implementing)
-Recommendations marked ★. These map to the six areas the kickoff flagged.
+### Decisions confirmed (2026-07-09)
+The owner confirmed Q1/Q2/Q3/Q5 as recommended (★) and **overrode** Q4 and Q6:
 
-| # | Question | Options / recommendation |
-|---|----------|--------------------------|
-| **Q1 Lobby finished-list** | Does `GET /api/games` include recently-finished games, and from where? | ★ **Yes — active from the in-memory registry + last 20 finished from Postgres** (D-e). Alt: active-only (simpler, but the lobby empties the instant no game is live — the ambient bots keep active non-empty, so active-only is viable). Confirm the finished cap (20) + poll interval (3s). |
-| **Q2 Catch-up mechanism** | Snapshot-as-first-SSE-event vs REST-snapshot-then-subscribe? | ★ **Snapshot as the first SSE event** (D-a/D-b), reusing the subscribe-before-yield fix; client dedups the join move by `ply`. Alt: a `GET …/snapshot` then open SSE — reintroduces the gap unless carefully ordered. |
-| **Q3 Replay source** | One endpoint for both live & finished? Add a SAN move-list to `LiveState`? | ★ **Yes to both** — `GET /api/games/{id}` projects `LiveState` (live) or parses PGN (finished) into one `[{ply,san,uci,fen}]` shape (D-c/D-d); the client scrubs the same list either way. |
-| **Q4 Ambient house bots** | How many, which pools, rated?, respawn, coexistence with greeter/finalizer? | ★ **N=2 house-vs-house games in 3+0, unrated & not persisted, respawn on finish, created outside the matcher** (D-g/D-h) with a ~1s move delay so they're watchable. Alt-A: rated + persisted (shows rating movement, but drifts house ratings on an infinite stream and adds filler rows to history). Alt-B: also seed the 5+0 pool. **Owner call — this fixes the demo's "lobby is never empty" feel.** |
-| **Q5 SSE `game_over` ratings** | Add the rating change to the spectator `game_over` (+ lobby finished entries)? | ★ **Yes — add `rating:{white,black:{before,after}}` to the SSE `game_over` event** (D-f), so the watch view can show "+8 / −8" at game end. (Finished-lobby entries already carry `*_rating_after` via the games row.) |
-| **Q6 Playwright now?** | Does V6 introduce browser e2e, or stay backend-tested + `svelte-check`? | ★ **Defer Playwright** — V6 stays backend-tested (lobby REST, catch-up SSE, replay endpoint, ambient supervisor) + `svelte-check`, with the browser flow verified by `make demo`. Standing up Playwright + browser CI is its own infra step; the value-dense logic is all backend-testable. Alt: one smoke Playwright test (dashboard→watch→replay). **Flag: the end-to-end smoke test (ADR-0023) becomes meaningful now — decide if a single smoke e2e is worth it.** |
+| # | Question | Confirmed |
+|---|----------|-----------|
+| **Q1 Lobby finished-list** | Include recently-finished, and from where? | ★ **Yes — active from the in-memory registry + last 20 finished from Postgres** (D-e). Poll every 3s. |
+| **Q2 Catch-up mechanism** | Snapshot-as-first-SSE-event vs REST-then-subscribe? | ★ **Snapshot as the first SSE event** (D-a/D-b); client dedups the join move by `ply`. |
+| **Q3 Replay source** | One endpoint for both; add SAN move-list to `LiveState`? | ★ **Yes to both** — `GET /api/games/{id}` projects `LiveState` (live) or parses PGN (finished) into one `[{ply,san,uci,fen}]` shape (D-c/D-d). |
+| **Q4 Ambient house bots** | How many/which pools/rated?/respawn/coexistence? | **OVERRIDE (not the ★ unrated option): RATED + PERSISTED.** N=2 house-vs-house in 3+0, respawn on finish, created outside the matcher but launched via the normal finalizer-carrying `GameLauncher` (D-g). Needs a seeded 2nd house identity (D-h, migration `0004`) and a row-locked finalizer (D-g2). House rating drift accepted (O-1). |
+| **Q5 SSE `game_over` ratings** | Add the rating change to the spectator `game_over`? | ★ **Yes — add `rating:{white,black:{before,after}}` to the SSE `game_over` event** (D-f). |
+| **Q6 Playwright** | Introduce browser e2e now, or defer? | **OVERRIDE (not the ★ defer option): ONE SMOKE E2E NOW.** Add a single Playwright test for dashboard→click→watch→replay (the ADR-0023 end-to-end smoke) + the Playwright/CI setup it needs. Phase D (browser e2e) is thus adopted in V6. |
 
 ---
 
@@ -141,26 +143,33 @@ The watch page holds one `moves[]` (from SSE snapshot+tail for a live game, or f
 /api/games/{id}` for a finished one) and one `viewIndex`. Live-following = viewIndex pinned to the
 last move; scrubbing back detaches it (a "▶ live" button re-pins). Same controls, same list, both cases.
 
-### Ambient house bots (D-g/D-h) — the design
+### Ambient house bots (D-g/D-h) — the design (rated + persisted, Q4 confirmed)
 ```
-AmbientSupervisor(registry, launcher-ish, house_a, house_b, n=2, tc=3+0, move_delay≈1s):
+AmbientSupervisor(registry, launcher, house_a, house_b, n=2, tc=3+0, move_delay≈1s):
   started/stopped by the app lifespan (like the matcher loop)
   keeps `n` live house-vs-house games:
     on start and whenever a game ends -> while live_count < n: spawn_one()
-    spawn_one(): game = registry.create_game(white=Participant(house_a...), black=Participant(house_b...), tc)
-                 run_game(game, pubsub, finalizer=None, house_move_delay=move_delay, registry=None)
-                 (finalizer=None -> no DB row, no rating; registry passed only if we want unbind — n/a for house)
+    spawn_one():
+      game = registry.create_game(white=Participant(house_a, is_house=True, house=<RandomBot a>),
+                                   black=Participant(house_b, is_house=True, house=<RandomBot b>), tc)
+      await launcher.launch(game)      # normal path: seats + bind + run_game with the real finalizer
+      track the returned task; on its completion -> refill
 ```
 - **Not** enrolled in the matcher pool → zero interference with real pairing, same-owner (H5),
-  anti-rematch (E5), the greeter (Kind-2), or the V5 finalizer. Created directly, exactly like V1's
-  house games but house-vs-house.
-- `finalizer=None` → ADR-0010/0011 clean: no persisted result, no rating movement (the games are
-  ephemeral lobby-fillers). They appear in the lobby's **active** list (from the registry) while
-  running and simply vanish when they end (not added to the finished list, since not persisted).
+  anti-rematch (E5), or the greeter (Kind-2). Created directly, then launched through the *same*
+  `GameLauncher` real games use — so they persist to `games` and rate both house bots via the V5
+  finalizer (Q3 "rate both uniformly").
+- The supervisor watches each launched game's task to refill (the `GameLauncher` already tracks task
+  refs; the supervisor adds a done-callback to trigger `_refill`). Because house seats have no
+  session, `bind_active`/`unbind_active` are no-ops for them — the games still appear in the lobby's
+  **active** list via `list_active()` (registry `_games`, state in {paired,in_progress}) and, once
+  finished, in the **finished** list (Postgres).
 - Random-vs-random terminates via V5's `claim_draw=True` auto-draw (threefold/fifty) even in long
   games; the ~1s move delay makes them watchable and bounds CPU.
-- Config: `ER_AMBIENT_GAMES` (default **2**, `0` disables — CI/tests set 0 for determinism),
-  `ER_AMBIENT_MOVE_DELAY_SECONDS` (default **1.0**), `ER_AMBIENT_POOL` (default `"180+0"`).
+- Two `RandomBot` movers with the two seeded identities (`bot_house_random`, `bot_house_random_2`).
+- Config: `ER_AMBIENT_GAMES` (default **2**, `0` disables — CI/unit-tests set 0 for determinism;
+  ambient integration tests set 2), `ER_AMBIENT_MOVE_DELAY_SECONDS` (default **1.0**),
+  `ER_AMBIENT_POOL` (default `"180+0"`).
 
 ## Project layout (changes this slice)
 ```
@@ -169,13 +178,16 @@ server/engine_room/
     game.py            # + LiveState.moves; + Game.spectator_snapshot(); Game.list-friendly view helper
     worker.py          # append to live.moves each ply; publish rating on the game_over event (Q6/D-f)
     registry.py        # + GameRegistry.list_active() (paired|in_progress games)
-    house_bots.py      # + a second house identity (house-random-2) constructor (D-h)
+    house_bots.py      # + house-random-2 identity constants + RandomBot(id=...) for the 2nd (D-h)
     ambient.py         # NEW — AmbientSupervisor (D-g), started/stopped by the lifespan
   spectate/
     sse.py             # snapshot-as-first-event (D-a); dedup contract documented
     games.py           # NEW — GET /api/games (lobby, D-e) + GET /api/games/{id} (replay/detail, D-d)
+  persistence/
+    finalize.py        # + with_for_update() row lock on the bot loads (D-g2)
   app.py               # mount games router; start/stop AmbientSupervisor in the lifespan; DI knobs
   config.py            # + ER_AMBIENT_* + ER_LOBBY_* knobs
+  alembic/versions/0004_*.py  # NEW — data-only: seed the house-random-2 bots row (D-h)
 frontend/src/
   routes/
     +page.svelte       # -> LOBBY: poll GET /api/games, render live-game cards, link to /watch
@@ -184,7 +196,8 @@ frontend/src/
     Board.svelte       # NEW — styled board component (glyphs, coords, last-move highlight, flip)
     ReplayControls.svelte  # NEW — ⏮ ◀ ▶ ⏭ + ply slider + play/pause
     api.ts             # NEW — API_BASE + typed fetch/EventSource helpers + shared types
-# no alembic migration (D-i); no models.py change
+tests/e2e/           # NEW — Playwright smoke: dashboard -> watch -> replay (Q6); playwright config
+# alembic 0004 is data-only (seed row); no models.py column change (D-i)
 ```
 
 ## Affordance → module map
@@ -195,7 +208,9 @@ frontend/src/
 | Live move history (N5) | `game/game.py` + `game/worker.py` | `LiveState.moves` appended each ply (D-c). |
 | Replay endpoint (F5) | `spectate/games.py` | `GET /api/games/{id}`: LiveState or PGN → uniform moves[] (D-d). |
 | SSE game_over rating (Q6) | `game/worker.py` | publish `rating` on the game_over event (D-f). |
-| Ambient house games (ADR-0022 Kind-1) | `game/ambient.py` + `game/house_bots.py` + `app.py` | supervisor maintains N house-vs-house, unrated/unpersisted (D-g/D-h). |
+| Ambient house games (ADR-0022 Kind-1) | `game/ambient.py` + `game/house_bots.py` + `app.py` + `alembic 0004` | supervisor maintains N house-vs-house, rated + persisted via the normal launcher (D-g/D-h). |
+| Row-locked rating write (D-g2) | `persistence/finalize.py` | `with_for_update()` on bot loads — safe under concurrent ambient finalization. |
+| 2nd house identity seed | `alembic/versions/0004_*.py` + `game/house_bots.py` | data-only seed of `house-random-2` (D-h). |
 | Dashboard / lobby UI (U1) | `frontend routes/+page.svelte` + `lib/api.ts` | poll + clickable live-game cards (D-j). |
 | Watch + replay UI (U2) | `frontend routes/watch/+page.svelte` + `lib/{Board,ReplayControls}.svelte` | catch-up + tail + scrub (D-j). |
 | Config knobs | `config.py` | `ER_AMBIENT_*`, `ER_LOBBY_*` (D-g/D-e). |
@@ -229,9 +244,13 @@ GET  /api/games/{id}   -> GameView                              # replay/detail 
 
 # game/ambient.py
 class AmbientSupervisor:
-    def __init__(self, registry, pubsub, house_a, house_b, *, n=2, tc, move_delay=1.0, finalizer=None): ...
-    async def start(self) -> None: ...   # spawn up to n; re-fill on each finish
-    async def stop(self) -> None: ...    # cancel supervision + in-flight ambient games
+    def __init__(self, registry, launcher, house_a, house_b, *, n=2, tc, move_delay=1.0): ...
+    async def start(self) -> None: ...   # spawn up to n via launcher.launch; re-fill on each finish
+    async def stop(self) -> None: ...    # cancel supervision (launcher owns the game tasks)
+
+# persistence/finalize.py (D-g2)
+#   white = await session.get(BotRow, id, with_for_update=True)   # row lock; safe under
+#   black = await session.get(BotRow, id, with_for_update=True)   # concurrent ambient finalize
 ```
 
 ## Build sub-steps (order within V6) — each ends demoable/testable
@@ -250,21 +269,30 @@ class AmbientSupervisor:
    finalizer returned a result. **Checkpoint:** integration — two bots play to a decisive result; the
    SSE `game_over` event carries `rating.white/black {before,after}` matching the persisted `games`
    row; an ABORTED game's `game_over` omits `rating`.
-4. **Ambient house bots.** Second house identity; `AmbientSupervisor` (D-g) started/stopped by the
-   lifespan; `ER_AMBIENT_*` knobs. **Checkpoint:** integration — with `ER_AMBIENT_GAMES=2`, `GET
-   /api/games` shows 2 house-vs-house active games shortly after startup; when one ends a replacement
-   appears (count returns to 2); no `games` row is written for them and no `bots.rating` moves; with
-   `ER_AMBIENT_GAMES=0` none run (CI/test default).
+4. **Ambient house bots (rated + persisted).** Migration `0004` seeds `house-random-2`; second
+   `RandomBot` identity in `house_bots.py`; `AmbientSupervisor` (D-g) started/stopped by the lifespan;
+   `with_for_update()` row lock in the finalizer (D-g2); `ER_AMBIENT_*` knobs. **Checkpoint:**
+   integration — with `ER_AMBIENT_GAMES=2`, `GET /api/games` shows 2 house-vs-house active games
+   shortly after startup; when one ends a replacement appears (count returns to 2) and the finished
+   game is persisted (a `games` row with both house bots + rating cols) and appears in the finished
+   list; with `ER_AMBIENT_GAMES=0` none run (CI/unit default). A concurrent-finalize test asserts two
+   games sharing a house bot both apply their rating update (no lost write).
 5. **Frontend: lobby + watch + replay + styled board.** Split the route (`/` lobby, `/watch` watch);
    `lib/Board.svelte`, `lib/ReplayControls.svelte`, `lib/api.ts`; catch-up (snapshot→tail) with ply
    dedup; live-follow vs scrub; finished-game replay via `GET /api/games/{id}`; rating change shown at
    game_over. **Checkpoint:** `npm run check` (svelte-check) green; manual `make demo` — open the
    dashboard, see the live lobby (incl. ambient games), click a game, watch from the correct current
    state, scrub back to move 1 and step forward.
-6. **Docs + cleanup + demo.** CLAUDE.md V6 → ✅ (+ build-status row); slices.md V6 row + completion
-   note; ADR-0015 (catch-up/replay/lobby realized), ADR-0022 (Kind-1 ambient realized in V6),
-   PROTOCOL spectator-note; this plan's "deviations as built" + "open items resolved/carried". Full
-   fast gate + integration suite green; PR finalized.
+6. **Playwright smoke e2e (Q6).** Add Playwright + a `tests/e2e/` smoke that boots the stack (or runs
+   against `make dev`/preview), loads the dashboard, waits for an ambient game in the lobby, clicks it,
+   asserts the board renders from the catch-up snapshot, and scrubs replay to move 1. Wire a CI job
+   (browser install). **Checkpoint:** the smoke test passes locally + in CI (the ADR-0023 end-to-end
+   smoke, now meaningful).
+7. **Docs + cleanup + demo.** CLAUDE.md V6 → ✅ (+ build-status row); slices.md V6 row + completion
+   note; ADR-0015 (catch-up/replay/lobby realized), ADR-0022 (Kind-1 ambient realized + rated in V6),
+   DEVELOPER-WORKFLOWS/WORKFLOW-ADOPTION (Playwright/Phase-D adopted), PROTOCOL spectator-note; this
+   plan's "deviations as built" + "open items resolved/carried". Full fast gate + integration suite +
+   e2e smoke green; PR finalized.
 
 ## Tests (at the seams — mirrors V1–V5 layering)
 - **Unit (`tests/unit/`, no infra — in-process ASGI / live-uvicorn-no-DB):**
@@ -278,25 +306,29 @@ class AmbientSupervisor:
     list from the stored PGN (per-ply fen == python-chess walk); it appears in the finished lobby list.
   - SSE `game_over` rating: a decisive game's SSE `game_over` carries `rating` matching the `games`
     row; ABORTED omits it.
-  - Ambient: `ER_AMBIENT_GAMES=2` → 2 house-vs-house active in the lobby; respawn on finish; no DB
-    row / no rating movement for them.
+  - Ambient (rated + persisted): `ER_AMBIENT_GAMES=2` → 2 house-vs-house active in the lobby; respawn
+    on finish; a finished ambient game persists a `games` row + appears in the finished list. Concurrent
+    finalize of two games sharing a house bot both apply (no lost rating write, D-g2).
 - **Seam reuse:** extend `tests/support/fake_client.py` (a spectator-connect helper if useful) and
   reuse `live_server(...)`, `always_pair`, `matcher_kwargs`, `FakeBotAuthenticator`. Ambient/lobby
   tests set `ER_AMBIENT_GAMES` via `create_app` DI knobs (add an `ambient_kwargs`-style seam, mirroring
   `hb_kwargs`).
-- **Frontend:** `npm run check` (svelte-check) stays the gate; Playwright deferred (Q6).
+- **Frontend:** `npm run check` (svelte-check) + a **Playwright smoke** (Q6) — dashboard → watch →
+  replay-to-move-1 — wired into CI (browser install).
 
 ## Out of scope (pinned to the slice that proves it)
 Packaged SDK / UCI bridge → **V7** · bot-management UI (create-bot / see-key / list-your-bots in the
 browser) → later polish (V2 REST already exists) · a dedicated **lobby SSE** stream (poll is the MVP,
 ADR-0015 F3) → post-MVP · Redis-backed fan-out / multi-worker → scale-out (ADR-0015 K2) · leaderboards
 / per-time-control ratings / rating history charts → post-MVP · inline SVG piece set / board
-animations → polish · Playwright browser e2e → deferred (Q6). **No schema change** (D-i).
+animations → polish · a broad Playwright suite (only a single smoke test is in V6, Q6) → later.
+**No DDL schema change** — only the `0004` house-bot seed (D-i).
 
 ## Open items (to carry)
-- **O-1 (Q4):** ambient games are unrated & unpersisted (D-g) — the lobby therefore shows them only
-  while live (they don't enter the finished list). Revisit if we want ambient results archived or a
-  house-bot ladder.
+- **O-1 (Q4):** ambient games are rated + persisted (D-g, owner override) — house ratings drift on the
+  infinite ambient stream (accepted per ADR-0022; harmless until a leaderboard exists) and finished
+  ambient games enter the `games` table + finished lobby list. Revisit with a leaderboard / house-bot
+  ladder, or reconsider unrated if drift becomes noisy.
 - **O-2 (Q1):** the finished-lobby list is a simple `LIMIT 20 ORDER BY finished_at DESC` — no
   pagination / filtering. Add if the lobby needs history browsing.
 - **O-3 (catch-up dup):** a join-boundary move can be delivered in both the snapshot and the tail; the
@@ -304,9 +336,9 @@ animations → polish · Playwright browser e2e → deferred (Q6). **No schema c
 - **O-4 (restart & replay):** a live game in flight at a server restart loses its in-memory
   `LiveState` (moves history) — only finished games (Postgres PGN) replay across a restart. Acceptable
   at single-process MVP (a mid-game restart already drops the game, V4/ADR-0020).
-- **O-5 (Playwright / smoke e2e, Q6):** the ADR-0023 end-to-end smoke test becomes meaningful once V6
-  exists; deferred here. Introduce with V7 (SDK) or as a dedicated Phase-D infra step.
+- **O-5 (Playwright breadth, Q6):** V6 ships ONE smoke e2e (dashboard→watch→replay); a fuller browser
+  suite (owner flows, error paths) is later. The ADR-0023 end-to-end smoke is now realized.
 - **O-6 (lobby poll vs SSE):** polling every 3s is fine at MVP traffic; a lobby SSE stream (ADR-0015
   F3) is the scale path.
-</content>
-</invoke>
+- **O-7 (D-g2 lock scope):** `with_for_update()` serializes rating writes correctly within Postgres;
+  it does not exist on the DB-free house-direct path (no session) — fine, that path doesn't rate.
