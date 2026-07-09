@@ -121,5 +121,10 @@ class Settings(BaseSettings):
     mm_greeter_solo_wait_seconds: float = 3.0
     mm_greeter_pools: list[str] = ["180+0"]
 
+    # Artificial pause before the in-process house bot replies. Default 0 (instant,
+    # no production impact); local dev sets ~0.5s so house games are watchable move
+    # by move. Charged to the house's own clock — safe on a Blitz clock.
+    house_move_delay_seconds: float = 0.0
+
 
 settings = Settings()

@@ -40,9 +40,15 @@ def game_start_for(game: Game, color: str) -> GameStart:
 
 
 class GameLauncher:
-    def __init__(self, pubsub: "PubSub", finalizer: Optional["Finalizer"] = None) -> None:
+    def __init__(
+        self,
+        pubsub: "PubSub",
+        finalizer: Optional["Finalizer"] = None,
+        house_move_delay: float = 0.0,
+    ) -> None:
         self._pubsub = pubsub
         self._finalizer = finalizer
+        self._house_move_delay = house_move_delay
         # Strong refs to in-flight game tasks so they aren't garbage-collected.
         self._tasks: set[asyncio.Task] = set()
 
@@ -55,6 +61,8 @@ class GameLauncher:
         for participant, color in ((game.white, "white"), (game.black, "black")):
             if participant.session is not None:
                 await participant.session.send(game_start_for(game, color))
-        task = asyncio.create_task(run_game(game, self._pubsub, self._finalizer))
+        task = asyncio.create_task(
+            run_game(game, self._pubsub, self._finalizer, self._house_move_delay)
+        )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)

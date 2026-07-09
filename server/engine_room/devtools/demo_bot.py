@@ -9,9 +9,13 @@ and one is minted for you (via `mint_bot`, needs DB access).
     uv run python -m engine_room.devtools.demo_bot              # auto-mint, one game
     uv run python -m engine_room.devtools.demo_bot --loop       # keep starting games
     uv run python -m engine_room.devtools.demo_bot --token crbk_...   # use a specific key
+    uv run python -m engine_room.devtools.demo_bot --engine random    # dumb (random) moves
 
-Options: --api ws-host (default localhost:8001), --web (default localhost:5174),
---move-delay s (0.7), --startup-delay s (4), --base/--inc time control, --token.
+By default the bot plays minimax + alpha-beta (`--engine`, `--depth 3`) so the
+game looks like real chess. It pauses `--move-delay` (0.5s) before each move so
+you can watch; pair it with ER_HOUSE_MOVE_DELAY_SECONDS so the house side is
+paced too. Other options: --api (localhost:8001), --web (localhost:5174),
+--startup-delay (4s), --base/--inc time control, --token.
 
 (`websockets` is available in the server image via uvicorn[standard].)
 """
@@ -25,6 +29,8 @@ import random
 
 import chess
 import websockets
+
+from ..game.minimax import choose_move as minimax_move
 
 
 async def play_one(args, key: str, rng: random.Random) -> None:
@@ -63,12 +69,17 @@ async def play_one(args, key: str, rng: random.Random) -> None:
         await asyncio.sleep(args.startup_delay)
 
         while True:
+            # Pause *before* moving so each side's move is spaced out for watching
+            # (the pair to this is the server-side house move delay for Black).
+            await asyncio.sleep(args.move_delay)
             board = chess.Board(turn["fen"])
-            uci = rng.choice(list(board.legal_moves)).uci()
+            if args.engine == "minimax":
+                uci = minimax_move(board, depth=args.depth, rng=rng)
+            else:
+                uci = rng.choice(list(board.legal_moves)).uci()
             await ws.send(
                 json.dumps({"type": "move", "game_id": game_id, "ply": turn["ply"], "uci": uci})
             )
-            await asyncio.sleep(args.move_delay)
             while True:
                 msg = json.loads(await ws.recv())
                 if msg["type"] == "your_turn":
@@ -96,8 +107,12 @@ async def main() -> None:
     p.add_argument("--token", default=None, help="crbk_ API key; auto-minted if omitted")
     p.add_argument("--base", type=int, default=180)
     p.add_argument("--inc", type=int, default=0)
-    p.add_argument("--move-delay", type=float, default=0.7, dest="move_delay")
+    p.add_argument("--move-delay", type=float, default=0.5, dest="move_delay",
+                   help="pause before each move (watchability); charged to the bot's clock")
     p.add_argument("--startup-delay", type=float, default=4.0, dest="startup_delay")
+    p.add_argument("--engine", choices=["minimax", "random"], default="minimax",
+                   help="move engine (default: minimax + alpha-beta)")
+    p.add_argument("--depth", type=int, default=3, help="minimax search depth")
     p.add_argument("--loop", action="store_true", help="keep starting new games")
     args = p.parse_args()
 

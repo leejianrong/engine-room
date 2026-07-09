@@ -33,6 +33,9 @@ services:
     environment:
       ER_DATABASE_URL: postgresql+asyncpg://engine_room:engine_room@db:5432/engine_room
       # CORS default already allows http://localhost:5174 (the frontend origin).
+      # Pace the house bot's replies so demo games are watchable move-by-move
+      # (local only; production leaves this at the default 0 = instant).
+      ER_HOUSE_MOVE_DELAY_SECONDS: "0.5"
     ports:
       - "8001:8001"
 

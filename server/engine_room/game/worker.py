@@ -38,10 +38,10 @@ _TERMINATION = {
 }
 
 
-def _make_seat(participant, game_id: str, color: str):
+def _make_seat(participant, game_id: str, color: str, house_delay: float = 0.0):
     if participant.session is not None:
         return WsSeat(participant.session, game_id, color, participant.bot.rating)
-    return HouseSeat(participant.house, game_id, color)
+    return HouseSeat(participant.house, game_id, color, delay=house_delay)
 
 
 def _clocks(clock: Clock) -> Clocks:
@@ -71,21 +71,25 @@ def _render_pgn(game: Game, board: chess.Board) -> str:
 
 
 async def run_game(
-    game: Game, pubsub: "PubSub", finalizer: Optional[Finalizer] = None
+    game: Game,
+    pubsub: "PubSub",
+    finalizer: Optional[Finalizer] = None,
+    house_move_delay: float = 0.0,
 ) -> tuple[str, str]:
     """Play the game to a terminal; return (result, termination).
 
     Publishes spectator events (game_start / move / game_over) to the game's
     channel via `pubsub` (N7) as the game unfolds. On the terminal, if a
     `finalizer` is provided, the durable record is written before the bots are
-    notified (N8); when None, persistence is skipped.
+    notified (N8); when None, persistence is skipped. `house_move_delay` paces
+    an in-process house seat's replies (dev watchability; default instant).
     """
     board = chess.Board(game.initial_fen)
     clock = Clock(game.white_ms, game.black_ms)
     inc_ms = game.time_control.increment_seconds * 1000
     seats = {
-        chess.WHITE: _make_seat(game.white, game.id, "white"),
-        chess.BLACK: _make_seat(game.black, game.id, "black"),
+        chess.WHITE: _make_seat(game.white, game.id, "white", house_move_delay),
+        chess.BLACK: _make_seat(game.black, game.id, "black", house_move_delay),
     }
     channel = game_channel(game.id)
     loop = asyncio.get_event_loop()

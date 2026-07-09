@@ -59,7 +59,9 @@ Why a demo bot at all? There's **no lobby yet** (that's V6), and bots are extern
 connect *to* the platform — so a match only exists once a bot seeks one. The demo bot
 (`engine_room.devtools.demo_bot`) is a throwaway stand-in for the future `chessroom` SDK: it
 mints a real API key, seeks a game (matched to a real opponent if one is queued, else the house
-greeter), and prints the `game_id` to spectate.
+greeter), and prints the `game_id` to spectate. It plays **minimax + alpha-beta** (`--engine
+random` for dumb moves) and pauses briefly before each move so you can follow along; the house
+side is paced by `ER_HOUSE_MOVE_DELAY_SECONDS` (set to 0.5s locally, 0 in production).
 
 ## Local development
 
