@@ -4,11 +4,19 @@ shaping: true
 
 # V4 Plan — Resilience
 
-**Status: 🔨 IN PROGRESS (2026-07-09).** The owner confirmed the three load-bearing forks on
-2026-07-09 — **D-i** (seat owns the inbox), **D-iii** (per-connection ping task, 10s/30s), and
-**D-vi** (minimal terminal stash) — after a visualized walkthrough of the options. The lower-fork
-decisions (D-ii/D-iv/D-v/D-vii) follow the recommendations below by owner deferral. All D-* are now
-pinned; implementation proceeds sub-step by sub-step. Built on `feat/v4-resilience`.
+**Status: ✅ COMPLETE (2026-07-09).** Built in 6 sub-steps on `feat/v4-resilience`. The owner
+confirmed the three load-bearing forks after a visualized walkthrough — **D-i** (seat owns the inbox),
+**D-iii** (per-connection ping task, 10s/30s), **D-vi** (minimal terminal stash); the lower-fork
+decisions (D-ii/D-iv/D-v/D-vii) followed the recommendations by owner deferral. Reconnect-resume,
+`ply`-idempotency, illegal-move forfeit, heartbeat, and mutual-abandonment ABORT all land; no schema
+change. 100 unit + 27 integration tests green; the demo bot reconnects+resumes (`--drop-after`
+verified live). Deviations from the plan as built: **(a)** to keep every commit green, the seat's
+idempotency/forfeit logic (sub-step 2) landed while the seat still read `session.inbound`; the inbox
+*moved onto the seat* in sub-step 3 with the index/routing change. **(b)** `prepare_game` (seats +
+live state) is **idempotent** and called by both the launcher (before `game_start`) and `run_game`, so
+the direct-call house/test path still works without the launcher. **(c)** the demo bot needed
+pong-handling + a leading stale-`game_over` skip (D-vi delivers a missed result on the next connect,
+so a robust client must tolerate one before `seek_ack`).
 
 Implementation plan for slice **V4** (from Shape A, part A4). Higher levels:
 [slices.md](slices.md) (V4 row), [shaping.md](shaping.md) (R's, Shape A, A4 thickening row).
@@ -266,34 +274,34 @@ class Ping(BaseModel):  type: Literal["ping"] = "ping"; t: int      # outbound
 class Pong(BaseModel):  type: Literal["pong"]; t: int               # inbound; add to _CLIENT_MODELS
 ```
 
-## Build sub-steps (order within V4) — each ends demoable/testable
-1. **Protocol + config.** `Ping`/`Pong` models + parse-map; `ER_HB_*` settings; wire `NO_ACTIVE_GAME`
+## Build sub-steps (order within V4) — all ✅ done
+1. ✅ **Protocol + config.** `Ping`/`Pong` models + parse-map; `ER_HB_*` settings; `NO_ACTIVE_GAME`
    usage. **Checkpoint:** unit — parse `pong`; `ping` serializes; HB settings default/override.
-2. **Seat idempotency + illegal-move forfeit (seat-owned inbox).** Move `inbound` onto `WsSeat`;
-   implement §9 classification + re-ack + `IllegalMoveForfeit`; worker maintains `applied` and catches
-   the forfeit → `game_over` `illegal_move`; best-effort sends (D-b). **Checkpoint:** unit — drive a
-   seat/worker with a scripted inbox: dup→re-ack (single apply), stale→ignore, future→INVALID_PLY,
-   illegal/unparseable→forfeit. Existing V1 game-loop tests still green.
-3. **Live state + active-game index + launcher refactor.** `LiveState`/`Game.seats/live/abort/
-   seat_for/resume_payload`; `GameRegistry` bind/unbind/active_game_for; launcher creates seats +
-   live + `bind_active` before `game_start`/spawn; `run_game` operates on `game.live` and unbinds at
-   terminal; endpoint routes `move`→seat via the index (`NO_ACTIVE_GAME` otherwise). **Checkpoint:**
-   unit — `resume_payload` shape from a mid-game `LiveState`; `move` routes to the seat; all prior
-   tests green.
-4. **Reconnect-resume in the endpoint.** Populate `welcome.active_game`; `seat.rebind(session)`;
-   resend `your_turn` if it's the bot's turn; deliver a recent-terminal `game_over` (D-vi).
-   **Checkpoint:** integration (live uvicorn) — kill a mid-game socket, reconnect same key, assert
-   `welcome.active_game` + resume + play to a natural terminal; a **blind move-resend** after the blip
-   is re-acked (not double-applied).
-5. **Heartbeat + mutual-abandonment ABORT.** Per-connection ping task; `pong` in the receive loop;
-   liveness-timeout close; disconnect cleanup → both-gone → abort event → `run_game` ABORTED exit →
-   `games` row (no rating). **Checkpoint:** integration — both bots disconnect → game ABORTS (row
-   `result="aborted"`, no rating); a bot that stops ponging is closed after a tiny liveness timeout;
-   a **single** disconnect does **not** abort (the loop keeps running; clock governs).
-6. **Docs + cleanup + demo.** Update CLAUDE.md build-status (V4 ✅), slices.md V4 row + completion
-   note, this plan's status → done; reconcile PROTOCOL §8/§9/§10 with the code; add an ADR-0004
-   "superseded by ADR-0025 #3, realized in V4" pointer. ruff clean; full gate green; verify
-   `make demo` (kill the demo bot mid-game, watch it reconnect and finish). Finalize the PR.
+2. ✅ **Seat idempotency + illegal-move forfeit.** §9 classification + re-ack + `IllegalMoveForfeit`;
+   worker maintains `applied` and catches the forfeit → `game_over` `illegal_move`; best-effort sends
+   (D-b). *(Seat still read `session.inbound` here — the inbox moved onto the seat in s3, so each
+   commit stayed green.)* **Checkpoint:** unit — scripted inbox: dup→re-ack (single apply),
+   stale→ignore, future→INVALID_PLY, illegal/unparseable→forfeit; WS-seam forfeit. V1 tests green.
+3. ✅ **Live state + active-game index + launcher refactor.** `LiveState`/`Game.seats/live/abort/
+   seat_for/resume_payload`; `GameRegistry` bind/unbind/active_game_for/recent_terminal; **seat inbox
+   moved onto `WsSeat`**; `prepare_game` (idempotent) builds seats+live, called by launcher (before
+   `game_start`) and `run_game`; `run_game` operates on `game.live` and unbinds at terminal; endpoint
+   routes `move`→seat via the index (`NO_ACTIVE_GAME` otherwise). **Checkpoint:** unit —
+   `resume_payload` shape; index bind/unbind; `NO_ACTIVE_GAME`. All prior tests green.
+4. ✅ **Reconnect-resume in the endpoint.** `welcome.active_game`; `seat.rebind(session)`; resend
+   `your_turn` if it's the bot's turn; deliver a recent-terminal `game_over` (D-vi). **Checkpoint:**
+   live-uvicorn — kill a mid-game socket, reconnect same key, assert `welcome.active_game` + resume +
+   play to a natural terminal; a **blind move-resend** is re-acked (not double-applied).
+5. ✅ **Heartbeat + mutual-abandonment ABORT.** Per-connection ping task; `pong` in the receive loop;
+   liveness-timeout close; disconnect cleanup → both-gone → abort event → `run_game` ABORTED exit
+   (`result`/`termination` `aborted`, no rating). `create_app(hb_kwargs=...)`. **Checkpoint:**
+   live-uvicorn — both disconnect → ABORT (reconnect gets `game_over` aborted, `rating` null); a
+   **single** disconnect does **not** abort (survivor stays live, dropped bot resumes); a bot that
+   stops ponging is closed after a tiny liveness timeout.
+6. ✅ **Docs + cleanup + demo.** CLAUDE.md (V4 ✅), slices.md V4 row + completion note, this plan →
+   done; PROTOCOL §8/§9/§10 marked *implemented in V4*; ADR-0004 marked superseded-by-ADR-0025 #3 /
+   realized-in-V4. Demo bot made a proper V4 client (answers pings; reconnects+resumes; `--drop-after
+   N` demonstrates kill/reconnect/finish — verified live). Full gate green; PR finalized.
 
 ## Tests (at the seams — mirrors V1/V2/V3 layering)
 - **Unit (`tests/unit/`, no infra):**
@@ -319,15 +327,18 @@ cooldowns (ADR-0019 H2/H3) → V-later · ambient pool-resident house bots / 2nd
 Redis-backed live-state / cross-worker reconnect → post-MVP scale-out. **Reconnect is governed by the
 clock, not a window** — ADR-0004's reconnect window is **not** reintroduced (ADR-0025 #3).
 
-## Open items (to resolve during the slice)
-- **O-1 (D-vi):** include the minimal recent-terminal `game_over`-on-reconnect stash, or defer? (Affects
-  whether a bot that flags while away learns its result before V6.) — **awaiting confirmation.**
-- **O-2 (D-ii caveat):** resume-payload clocks show the last-charged `remaining_ms` (a small
+## Open items (resolved / carried)
+- **O-1 (D-vi):** ✅ resolved — owner confirmed the minimal recent-terminal stash. **Carried nuance:**
+  it is delivered on the **next connect** regardless of whether the bot already saw `game_over` live,
+  so a client may receive one stale `game_over` (for a prior game) before `seek_ack`. Robust clients
+  must tolerate/ignore it (the demo bot does); tightening to "only if the bot was away at terminal"
+  needs `session_registry` in the worker/registry — deferred (would remove the duplicate).
+- **O-2 (D-ii caveat):** carried — resume-payload clocks show the last-charged `remaining_ms` (a small
   over-report for the mover mid-think). Acceptable at MVP; revisit if a bot's resume logic needs the
   running value.
-- **O-3 (D-iii):** liveness tie-in assumes at most one active game per bot (the index is `bot_id→Game`).
-  True at MVP (a bot seeks → plays → then seeks again); revisit if concurrent games per bot ever land.
-- **O-4:** `_recent_terminal_by_bot` / `_active_by_bot` eviction — unbounded in principle
+- **O-3 (D-iii):** carried — the active index is `bot_id→Game` (at most one active game per bot). True
+  at MVP; revisit if concurrent games per bot ever land.
+- **O-4:** carried — `_recent_terminal_by_bot` / `_active_by_bot` eviction is unbounded in principle
   (single-process, bot-count-bounded in practice). Fine for MVP; a TTL/size cap is a V-later cleanup.
-- **O-5 (docs):** on completion, reconcile PROTOCOL §8/§9/§10 with the built behavior and add the
-  ADR-0004→ADR-0025 "realized in V4" pointer (sub-step 6).
+- **O-5 (docs):** ✅ done — PROTOCOL §8/§9/§10 marked *implemented in V4*; ADR-0004 marked superseded
+  by ADR-0025 #3 / realized in V4.
