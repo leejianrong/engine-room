@@ -46,49 +46,37 @@ Start at the **[docs index](docs/README.md)**. The key documents:
 - **Frontend:** TypeScript, SvelteKit + Vite (static SPA, SSE-driven).
 - **Bot SDK:** `chessroom` Python package — a *separate* repo (depends only on the versioned protocol spec, ADR-0021); not in this repo.
 
-## Try it out — watch a live match
-
-Run the whole platform with Docker, then start a bot match and spectate it:
+## Try it out — watch a live match (one command)
 
 ```bash
-# 1. build + run db + backend + frontend
-docker compose --profile app up --build          # backend :8001, frontend :5174
-
-# 2. in another terminal, start a match vs the house bot
-cd server && uv run python ../scripts/demo_bot.py
-#   → prints:  Watch it here:  http://localhost:5174/?game=game_xxxxxxxx
-
-# 3. open that URL in your browser and watch the board update move-by-move
-#    (--loop keeps starting fresh games; --move-delay 1.5 slows it down)
-
-# stop everything
-docker compose --profile app down
+make demo        # builds & runs db + backend + frontend + a looping demo bot (all in Docker)
 ```
 
-Why a separate bot script? V1 has **no lobby yet** (that's V6), and bots are external
-clients that connect *to* the platform — so a match only exists once a bot seeks one.
-`scripts/demo_bot.py` is a throwaway stand-in for the future `chessroom` SDK; it prints the
-`game_id` you need to spectate.
+Then open **http://localhost:5174** and paste the `game_…` id from the `demo-bot` logs
+(`Watch it here: …`) into the box — the board updates move-by-move. `make down` stops everything.
+
+Why a demo bot at all? There's **no lobby yet** (that's V6), and bots are external clients that
+connect *to* the platform — so a match only exists once a bot seeks one. The demo bot
+(`engine_room.devtools.demo_bot`) is a throwaway stand-in for the future `chessroom` SDK: it
+mints a real API key, seeks a game (matched to a real opponent if one is queued, else the house
+greeter), and prints the `game_id` to spectate.
 
 ## Local development
 
-Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js, Docker.
+Prerequisites: [uv](https://docs.astral.sh/uv/), Node.js, Docker. Run `make` (or `make help`)
+to see every target.
 
 ```bash
-# 1. Postgres
-docker compose up -d db          # host port 5433
-
-# 2. Backend  (see server/README.md)
-cd server
-uv sync
-uv run alembic upgrade head
-uv run uvicorn engine_room.app:app --reload --port 8001   # http://127.0.0.1:8001/health
-
-# 3. Frontend (see frontend/README.md)
-cd ../frontend
-npm install
-npm run dev                      # http://localhost:5174
+make install     # once per clone: uv sync + npm install
+make dev         # db + backend + frontend, all with hot reload (Ctrl-C stops)
+make bot         # in another terminal: start games vs the house + print the watch URL
+make mint        # just print a fresh bot API key (crbk_…) to use with your own client
+make test        # fast gate: ruff + unit tests + svelte-check
 ```
+
+`make dev`/`make demo` wrap the raw steps (`docker compose up -d db`, `alembic upgrade head`,
+`uvicorn --reload --port 8001`, `npm run dev`); run them by hand if you prefer (see the Makefile,
+`server/README.md`, `frontend/README.md`).
 
 ## License
 
