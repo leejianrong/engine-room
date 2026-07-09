@@ -15,7 +15,7 @@ HOUSE_DELAY := ER_HOUSE_MOVE_DELAY_SECONDS=0.5
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install db migrate backend frontend dev mint bot demo up down test
+.PHONY: help install db migrate backend frontend dev mint bot demo up down down-clean test
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -64,6 +64,9 @@ up: ## Whole platform in Docker (no bot)
 
 down: ## Stop and remove all local containers
 	$(COMPOSE) --profile demo down
+
+down-clean: ## Like `down`, but also wipe the Postgres volume for a clean slate
+	$(COMPOSE) --profile demo down -v
 
 test: ## Fast gate: ruff + unit tests + svelte-check
 	cd server && uv run ruff check . && uv run pytest tests/unit -q

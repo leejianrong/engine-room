@@ -36,7 +36,8 @@ docker-compose.yml   local Postgres on host :5433
 **Shortcuts (Makefile):** `make demo` = whole platform + a looping demo bot in Docker (one
 command to watch a live game); `make dev` = db + backend + frontend with hot reload, then
 `make bot` (another terminal) to start a game; `make mint` prints a real `crbk_` key; `make test`
-= fast gate. `make help` lists all targets. The raw steps below are what they wrap.
+= fast gate; `make down` stops the stack (`make down-clean` also wipes the Postgres volume for a
+clean slate). `make help` lists all targets. The raw steps below are what they wrap.
 
 ```bash
 # once per clone (installs the fast pre-push gate)
