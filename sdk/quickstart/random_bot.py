@@ -29,5 +29,6 @@ class RandomBot(Bot):
 
 
 if __name__ == "__main__":
-    # loop=True keeps seeking new games after each one finishes.
-    RandomBot(name="my-first-bot").run(loop=True)
+    # loop=True keeps seeking new games after each one finishes. Your bot's name
+    # in the lobby is the one you gave it in the dashboard.
+    RandomBot().run(loop=True)

@@ -62,13 +62,14 @@ class Bot:
         key: Optional[str] = None,
         url: Optional[str] = None,
         *,
-        name: Optional[str] = None,
         time_control: tuple[int, int] = (180, 0),
         connect: Optional[Callable[[], Awaitable[Transport]]] = None,
     ) -> None:
         self.key = key or os.environ.get("CHESSROOM_KEY")
         self.url = url or os.environ.get("CHESSROOM_URL") or DEFAULT_URL
-        self.name = name
+        # The bot's display name/identity is set server-side from its API key
+        # (created in the dashboard); there is no client-declared name (hello
+        # carries only protocol_version + sdk, PROTOCOL §4).
         self.time_control = time_control
         # Injectable transport factory (tests). Defaults to a real WebSocket.
         self._connect_factory = connect
