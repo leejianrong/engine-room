@@ -50,6 +50,10 @@ class LiveState:
     ply: int = 0  # the next (expected) half-move to be played
     last_move: Optional[dict] = None  # {"uci","san"} of the last applied move
     applied: dict[int, str] = field(default_factory=dict)  # ply -> uci (§9 re-ack)
+    # The offerer's color while a draw offer stands ("white"/"black"), or None.
+    # Surfaced to the OTHER side via your_turn.opponent_draw_offer; cleared when
+    # the recipient makes a move (implicit decline, ADR-0016 D6). V5.
+    pending_draw_offer: Optional[str] = None
 
 
 @dataclass
@@ -68,6 +72,10 @@ class Game:
     live: Optional[LiveState] = None
     # Set when both seats vanish → run_game ends the game as ABORTED (V4 s5).
     abort: asyncio.Event = field(default_factory=asyncio.Event)
+    # Non-move control frames (resign/draw_offer/draw_accept, §7) as (color, msg).
+    # The endpoint routes them here — the loop always watches this queue, so a
+    # control from the side NOT on move still reaches it (V5 D-a).
+    controls: asyncio.Queue = field(default_factory=asyncio.Queue)
     # Terminal record, stashed at game-end so a bot that missed game_over while
     # disconnected can be told the outcome on reconnect (D-vi, delivered in s4).
     result: Optional[str] = None
@@ -81,6 +89,10 @@ class Game:
         if self.black.bot.id == bot_id:
             return "black"
         return None
+
+    def color_of(self, bot_id: str) -> Optional[str]:
+        """This bot's color ("white"/"black") in this game, or None."""
+        return self._color_of(bot_id)
 
     def seat_for(self, bot_id: str):
         """The seat this bot occupies, or None if it isn't in this game."""
@@ -105,6 +117,9 @@ class Game:
                 "white_ms": live.clock.remaining_ms(chess.WHITE),
                 "black_ms": live.clock.remaining_ms(chess.BLACK),
             },
-            "opponent_draw_offer": False,  # draws are V5
+            # True if the OTHER side has a draw offer standing against this bot.
+            "opponent_draw_offer": (
+                live.pending_draw_offer is not None and live.pending_draw_offer != color
+            ),
             "to_move": "white" if board.turn == chess.WHITE else "black",
         }

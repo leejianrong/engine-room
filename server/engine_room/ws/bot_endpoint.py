@@ -22,6 +22,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..ids import new_id
 from ..protocol.messages import (
+    DrawAccept,
+    DrawOffer,
     Error,
     GameOver,
     Hello,
@@ -30,6 +32,7 @@ from ..protocol.messages import (
     Pong,
     ProtocolError,
     Rating,
+    Resign,
     Seek,
     SeekAck,
     SeekCancel,
@@ -229,6 +232,18 @@ async def bot_ws(websocket: WebSocket) -> None:
                     )
                 else:
                     await seat.inbound.put(msg)
+            elif isinstance(msg, (Resign, DrawOffer, DrawAccept)):
+                # Control frames (§7) can arrive when it is NOT this bot's turn, so
+                # they go to the game-level control channel the loop always watches
+                # (not the move-only seat inbox) — tagged with the sender's color.
+                active = game_registry.active_game_for(session.bot.id)
+                color = active.color_of(session.bot.id) if active is not None else None
+                if color is None:
+                    await session.send(
+                        Error(code="NO_ACTIVE_GAME", message="no active game for this control")
+                    )
+                else:
+                    await active.controls.put((color, msg))
             elif isinstance(msg, Pong):
                 # Heartbeat reply (§10): the socket is alive.
                 session.last_pong = time.monotonic()
