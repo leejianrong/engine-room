@@ -150,7 +150,24 @@ class WsSeat:
             MoveAck(id=self._pending_id, game_id=self.game_id, ply=ply, accepted=True)
         )
 
-    async def game_over(self, result: str, termination: str, final_fen: str, pgn: str) -> None:
+    async def game_over(
+        self,
+        result: str,
+        termination: str,
+        final_fen: str,
+        pgn: str,
+        rating_before: Optional[int] = None,
+        rating_after: Optional[int] = None,
+    ) -> None:
+        # Real Elo (V5): the finalizer computed+persisted these in one txn
+        # (ADR-0025 #5) and the loop passes them here. ABORTED → no rating (§8).
+        # No finalizer (DB-free/house-direct path) → stub before==after.
+        if result == "aborted":
+            rating = None
+        elif rating_before is not None and rating_after is not None:
+            rating = Rating(before=rating_before, after=rating_after)
+        else:
+            rating = Rating(before=self.rating, after=self.rating)
         await self._send(
             GameOver(
                 game_id=self.game_id,
@@ -158,7 +175,7 @@ class WsSeat:
                 termination=termination,
                 final_fen=final_fen,
                 pgn=pgn,
-                rating=Rating(before=self.rating, after=self.rating),  # stubbed; real Elo in V5
+                rating=rating,
             )
         )
 
@@ -190,5 +207,6 @@ class HouseSeat:
     async def confirm_move(self, ply: int) -> None:
         return None
 
-    async def game_over(self, result: str, termination: str, final_fen: str, pgn: str) -> None:
+    async def game_over(self, result: str, termination: str, final_fen: str, pgn: str,
+                        rating_before=None, rating_after=None) -> None:
         return None

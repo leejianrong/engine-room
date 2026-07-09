@@ -28,11 +28,15 @@ def _other(color: str) -> str:
     return "black" if color == "white" else "white"
 
 if TYPE_CHECKING:
+    from ..persistence.finalize import FinalizeResult
     from ..pubsub.base import PubSub
     from .registry import GameRegistry
 
-# (game, result, termination, final_fen, pgn) -> None
-Finalizer = Callable[[Game, str, str, str, str], Awaitable[None]]
+# (game, result, termination, final_fen, pgn) -> FinalizeResult | None
+# The result carries each side's persisted Elo (before, after) so game_over can
+# report the same numbers that were written (ADR-0025 #5); None on ABORTED or the
+# DB-free path (then the loop stubs the rating).
+Finalizer = Callable[[Game, str, str, str, str], Awaitable["Optional[FinalizeResult]"]]
 
 # python-chess termination -> ADR-0008 termination-reason vocabulary
 _TERMINATION = {
@@ -284,10 +288,21 @@ async def run_game(
         final_fen,
         pgn,
     )
+    outcome = None
     if finalizer is not None:
-        await finalizer(game, result, termination, final_fen, pgn)
+        outcome = await finalizer(game, result, termination, final_fen, pgn)
     for seat in seats.values():
-        await seat.game_over(result=result, termination=termination, final_fen=final_fen, pgn=pgn)
+        before = after = None
+        if outcome is not None:
+            before, after = outcome.white if seat.color == "white" else outcome.black
+        await seat.game_over(
+            result=result,
+            termination=termination,
+            final_fen=final_fen,
+            pgn=pgn,
+            rating_before=before,
+            rating_after=after,
+        )
     await pubsub.publish(
         channel,
         {
