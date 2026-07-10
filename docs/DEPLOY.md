@@ -1,9 +1,15 @@
 # Deploy runbook — Fly.io + Neon
 
 Host decision + rationale: [ADR-0026](adr/0026-hosting-fly-neon.md). This is the
-how-to. Backend (API + bot WebSocket) → **Fly.io**, one always-on machine.
-Database → **Neon** managed Postgres. Frontend → any static host (separate
-origin + CORS).
+how-to. Backend (API + bot WebSocket) **and the SvelteKit SPA** → **ONE Fly.io app**,
+one always-on machine. Database → **Neon** managed Postgres.
+
+> **Single origin (V8, KAN-68).** The frontend is built into the backend image and
+> served same-origin by uvicorn (Starlette `StaticFiles` + an SPA fallback — no
+> nginx, no separate frontend app). One `fly deploy` ships both. CORS is therefore
+> **optional** (only needed if you host the SPA on a *different* origin). This also
+> means one URL for the browser and the bots, and clean same-origin auth cookies
+> (see KAN-64).
 
 > **Single machine, on purpose.** Game state is in-memory in one process
 > (ADR-0018/0020). Never `fly scale count > 1` and never enable scale-to-zero —
@@ -46,19 +52,26 @@ fly secrets set \
   ER_GITHUB_OAUTH_CLIENT_ID=... \
   ER_GITHUB_OAUTH_CLIENT_SECRET=... \
   ER_GITHUB_OAUTH_REDIRECT_URL='https://<your-app-name>.fly.dev/api/auth/github/callback'
-# Frontend origin(s) for CORS (JSON list) once the frontend is deployed:
-fly secrets set ER_CORS_ALLOW_ORIGINS='["https://your-frontend.example"]'
 ```
 `ER_OAUTH_COOKIE_SECURE` defaults to `true` — correct for HTTPS prod; leave it unset.
+`ER_CORS_ALLOW_ORIGINS` is **not needed** — the SPA is served same-origin. Set it only
+if you additionally host the frontend on a separate origin (JSON list of origins).
 
 ## 4. First deploy (manual)
+Deploy **from the repo root** (not `cd server`): the image bakes the SPA in, so the
+Docker build context must include `frontend/`. `server/fly.toml` points at
+`server/Dockerfile`.
 ```bash
-cd server
-fly deploy --remote-only
-fly logs                                  # watch migrations + boot
+# from the repo root
+fly deploy --remote-only --config server/fly.toml
+fly logs                                  # watch the SPA build + migrations + boot
 curl https://<your-app-name>.fly.dev/health   # {"status":"ok"}
+curl -I https://<your-app-name>.fly.dev/      # 200 — the SPA index.html
 fly scale count 1                         # ensure exactly one machine
 ```
+The image's uvicorn CMD runs with `--proxy-headers --forwarded-allow-ips=*` so that
+behind Fly's TLS proxy the app sees `https` — **required** for GitHub OAuth (otherwise
+FastAPI-Users builds an `http://` redirect_uri that GitHub rejects).
 
 ## 5. GitHub OAuth app (for human login)
 Register an OAuth app at github.com → Settings → Developer settings → OAuth Apps:
@@ -79,48 +92,25 @@ gh variable set DEPLOY_ENABLED --body 'true'   # arms .github/workflows/deploy.y
 Thereafter: merge to `main` → CI runs → on green, `deploy.yml` ships the validated commit.
 Un-arm anytime with `gh variable set DEPLOY_ENABLED --body 'false'`.
 
-## 7. Frontend (separate origin) — Fly static
-The SvelteKit dashboard (V6) ships as a **second Fly app** (`engine-room-web`), a stateless static
-site: the existing multi-stage [`frontend/Dockerfile`](../frontend/Dockerfile) runs `npm run build`
-then serves `/app/build` with nginx on port 80. It is separate from the backend app and has no
-in-memory state, so scale-to-zero is fine (unlike the backend). Config: [`frontend/fly.toml`](../frontend/fly.toml).
-
-> **`VITE_API_BASE` is baked at BUILD time.** The browser bundle hard-codes the backend base URL at
-> `npm run build`, so the image must be built pointing at the backend's **public** URL. It is pinned
-> in `frontend/fly.toml` `[build.args]` (`VITE_API_BASE = "https://engine-room.fly.dev"`); re-pointing
-> requires a rebuild, not a runtime env change. Override for a one-off with `--build-arg`.
-
-### 7a. Create the app + first deploy (manual)
+## 7. Frontend — shipped in the backend image (same origin)
+There is **no separate frontend app**. The SvelteKit SPA is built by a Node stage in
+[`server/Dockerfile`](../server/Dockerfile) (`npm ci && npm run build` → `frontend/build`)
+and copied into the backend image; `ER_STATIC_DIR` points the app at it and uvicorn serves
+it same-origin (Starlette `StaticFiles` + an SPA fallback for client-side routes — no nginx).
+The step-4 `fly deploy` already ships it. Verify:
 ```bash
-cd frontend
-fly apps create engine-room-web          # matches `app` in frontend/fly.toml
-# Baked-in backend URL comes from fly.toml [build.args]; override with --build-arg to re-point:
-fly deploy --remote-only --build-arg VITE_API_BASE=https://engine-room.fly.dev
-curl -I https://engine-room-web.fly.dev/  # 200 from nginx
+curl -I https://<your-app-name>.fly.dev/          # 200 — index.html
+curl    https://<your-app-name>.fly.dev/api/games # JSON — API still wins over the SPA fallback
+curl -I https://<your-app-name>.fly.dev/watch     # 200 — SPA route (fallback to index.html)
 ```
 
-### 7b. Add the frontend origin to backend CORS
-The browser calls the API cross-origin, so the backend must allow this origin. Update the backend
-secret (see step 3) to include it (JSON list — keep any existing origins):
-```bash
-cd ../server
-fly secrets set ER_CORS_ALLOW_ORIGINS='["https://engine-room-web.fly.dev"]'
-```
-Bearer-JWT auth is cross-origin-friendly, so no same-origin/reverse-proxy setup is required.
-
-### 7c. Arm CI-gated frontend deploys (optional, recommended)
-Mirrors step 6, but a **separate app-scoped token** and its own gate var. The backend's
-`FLY_API_TOKEN` is scoped to the `engine-room` app and cannot deploy `engine-room-web`, so the
-frontend gets its own token:
-```bash
-cd frontend
-fly tokens create deploy -x 999999h                     # app-scoped to engine-room-web (run from frontend/)
-gh secret set FLY_FRONTEND_API_TOKEN --body '<token>'   # repo secret
-gh variable set FRONTEND_DEPLOY_ENABLED --body 'true'   # arms .github/workflows/deploy-frontend.yml
-```
-Thereafter: merge to `main` → CI runs → on green, `deploy-frontend.yml` ships the validated commit
-(distinct `concurrency` group from the backend, so both deploys run independently). Un-arm anytime
-with `gh variable set FRONTEND_DEPLOY_ENABLED --body 'false'`.
+- **No `VITE_API_BASE`.** The bundle calls the API with a **relative** base (`''`), so it hits
+  whatever origin served the page. `VITE_API_BASE` remains an override only for hosting the SPA
+  elsewhere.
+- **CORS is optional.** Same-origin needs no `ER_CORS_ALLOW_ORIGINS`. The middleware + env are
+  kept (harmless) purely for an external-origin frontend.
+- **Local dev** stays two processes (`make dev`): Vite on :5174 proxies `/api`, `/auth`, `/users`
+  to the backend on :8001 (see `frontend/vite.config.ts`), so it's same-origin with no dev CORS.
 
 ## Operating notes
 - **Redeploys drop live games** (single in-memory worker) — expected; deploy during quiet periods.
