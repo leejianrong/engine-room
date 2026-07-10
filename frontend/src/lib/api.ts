@@ -1,10 +1,14 @@
-// Backend API access (cross-origin; CORS-enabled on the server). Override with
-// VITE_API_BASE for non-default hosts. One place for the base URL, the typed
-// shapes the spectator UI consumes, and the fetch/EventSource helpers (V6).
+// Backend API access. Since V8 (KAN-68) the SPA is served same-origin by the
+// backend, so the base URL is empty (relative) by default — every fetch/EventSource
+// below hits the same host that served the page. In dev, `npm run dev` on :5174
+// proxies /api, /auth, /users to the backend (see vite.config.ts), so relative URLs
+// work there too. Override with VITE_API_BASE only to point at a different host.
+// One place for the base URL, the typed shapes the spectator UI consumes, and the
+// fetch/EventSource helpers (V6).
 
 import { ApiError, authHeaders } from './auth';
 
-export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8001';
+export const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
 export type Player = { name: string; rating: number | null; bot_id?: string | null };
 export type TimeControl = { base_seconds: number; increment_seconds: number };
