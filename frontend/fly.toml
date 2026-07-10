@@ -1,0 +1,43 @@
+# Fly.io config — engine-room frontend (static SvelteKit SPA, served by nginx).
+#
+# This is a SECOND Fly app, separate from the backend (`server/fly.toml`, app
+# "engine-room"). It is a stateless static site: nginx serving the pre-built
+# `/app/build` bundle. Unlike the backend it has NO in-memory game state, so
+# scale-to-zero / autoscale is fine and cheap — do NOT copy the backend's
+# always-on single-machine constraint here.
+#
+# The browser bundle bakes VITE_API_BASE at BUILD time (see frontend/Dockerfile
+# `ARG VITE_API_BASE`), so the image must be built pointing at the backend's
+# PUBLIC url. That is wired through [build.args] below — change it if the
+# backend app/domain changes. (Rebuild required to re-point; it is not runtime.)
+#
+# After deploying, add this app's origin (https://engine-room-web.fly.dev) to
+# the backend's ER_CORS_ALLOW_ORIGINS secret so the browser can call the API.
+# Deploy: `cd frontend && fly deploy` (or via CI, see
+# .github/workflows/deploy-frontend.yml). See docs/DEPLOY.md §7.
+
+app = "engine-room-web"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+  [build.args]
+    # Baked into the client bundle at build time — the public backend base URL.
+    VITE_API_BASE = "https://engine-room.fly.dev"
+
+[http_service]
+  internal_port = 80            # nginx (frontend/Dockerfile EXPOSE 80)
+  force_https = true
+  auto_stop_machines = true     # stateless static site — scale-to-zero is fine
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

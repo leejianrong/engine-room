@@ -79,10 +79,48 @@ gh variable set DEPLOY_ENABLED --body 'true'   # arms .github/workflows/deploy.y
 Thereafter: merge to `main` → CI runs → on green, `deploy.yml` ships the validated commit.
 Un-arm anytime with `gh variable set DEPLOY_ENABLED --body 'false'`.
 
-## 7. Frontend (separate origin)
-The polished dashboard is V6; for now the SvelteKit `frontend/` can be built and hosted on any
-static host, pointed at the Fly API base URL, with that origin added to `ER_CORS_ALLOW_ORIGINS`.
+## 7. Frontend (separate origin) — Fly static
+The SvelteKit dashboard (V6) ships as a **second Fly app** (`engine-room-web`), a stateless static
+site: the existing multi-stage [`frontend/Dockerfile`](../frontend/Dockerfile) runs `npm run build`
+then serves `/app/build` with nginx on port 80. It is separate from the backend app and has no
+in-memory state, so scale-to-zero is fine (unlike the backend). Config: [`frontend/fly.toml`](../frontend/fly.toml).
+
+> **`VITE_API_BASE` is baked at BUILD time.** The browser bundle hard-codes the backend base URL at
+> `npm run build`, so the image must be built pointing at the backend's **public** URL. It is pinned
+> in `frontend/fly.toml` `[build.args]` (`VITE_API_BASE = "https://engine-room.fly.dev"`); re-pointing
+> requires a rebuild, not a runtime env change. Override for a one-off with `--build-arg`.
+
+### 7a. Create the app + first deploy (manual)
+```bash
+cd frontend
+fly apps create engine-room-web          # matches `app` in frontend/fly.toml
+# Baked-in backend URL comes from fly.toml [build.args]; override with --build-arg to re-point:
+fly deploy --remote-only --build-arg VITE_API_BASE=https://engine-room.fly.dev
+curl -I https://engine-room-web.fly.dev/  # 200 from nginx
+```
+
+### 7b. Add the frontend origin to backend CORS
+The browser calls the API cross-origin, so the backend must allow this origin. Update the backend
+secret (see step 3) to include it (JSON list — keep any existing origins):
+```bash
+cd ../server
+fly secrets set ER_CORS_ALLOW_ORIGINS='["https://engine-room-web.fly.dev"]'
+```
 Bearer-JWT auth is cross-origin-friendly, so no same-origin/reverse-proxy setup is required.
+
+### 7c. Arm CI-gated frontend deploys (optional, recommended)
+Mirrors step 6, but a **separate app-scoped token** and its own gate var. The backend's
+`FLY_API_TOKEN` is scoped to the `engine-room` app and cannot deploy `engine-room-web`, so the
+frontend gets its own token:
+```bash
+cd frontend
+fly tokens create deploy -x 999999h                     # app-scoped to engine-room-web (run from frontend/)
+gh secret set FLY_FRONTEND_API_TOKEN --body '<token>'   # repo secret
+gh variable set FRONTEND_DEPLOY_ENABLED --body 'true'   # arms .github/workflows/deploy-frontend.yml
+```
+Thereafter: merge to `main` → CI runs → on green, `deploy-frontend.yml` ships the validated commit
+(distinct `concurrency` group from the backend, so both deploys run independently). Un-arm anytime
+with `gh variable set FRONTEND_DEPLOY_ENABLED --body 'false'`.
 
 ## Operating notes
 - **Redeploys drop live games** (single in-memory worker) — expected; deploy during quiet periods.
