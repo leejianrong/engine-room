@@ -19,11 +19,12 @@ MyBot().run(loop=True)                    # reads CHESSROOM_KEY / CHESSROOM_URL
 ## Install
 
 ```bash
-uv add chessroom          # or: pip install chessroom
+pip install chessroom     # or: uv add chessroom
 ```
 
-> During V7 the package lives in the Engine Room monorepo (`sdk/chessroom`); the
-> quickstart installs it by path/git until it's published to PyPI (V7 O-2).
+> The package is developed in the Engine Room monorepo (`sdk/chessroom`) and
+> published to PyPI from there via the `publish-sdk` GitHub workflow (see
+> [Publishing / Releasing](#publishing--releasing)).
 
 ## Configure
 
@@ -63,3 +64,33 @@ server changes:
 ```bash
 CHESSROOM_KEY=crbk_... chessroom-uci --engine /usr/bin/stockfish --think-time 0.1
 ```
+
+## Publishing / Releasing
+
+The SDK is published to [PyPI](https://pypi.org/project/chessroom/) by the
+`.github/workflows/publish-sdk.yml` workflow using **trusted publishing** (OIDC):
+no API token is ever stored in the repo. The workflow builds the sdist + wheel
+from `sdk/chessroom/` with `uv build` and uploads them with
+`pypa/gh-action-pypi-publish` from the `pypi` GitHub Environment.
+
+### One-time human setup (before the first release)
+
+1. **Create the PyPI project + Trusted Publisher.** On
+   [pypi.org](https://pypi.org) → *Your projects* → *Publishing* → add a new
+   **pending publisher** for a project named `chessroom` with:
+   - **Owner / repository:** `leejianrong/engine-room`
+   - **Workflow name:** `publish-sdk.yml`
+   - **Environment:** `pypi`
+
+   (A pending publisher lets the very first upload create the project; no manual
+   first upload or token is needed.)
+2. **Create the GitHub Environment** named `pypi` (repo *Settings → Environments*).
+   Optionally add required reviewers so a human approves each publish.
+
+### Cutting a release
+
+1. Bump the version in **both** `pyproject.toml` (`[project].version`) and
+   `src/chessroom/const.py` (`SDK_VERSION`) — keep them in lockstep — and merge to `main`.
+2. Publish a **GitHub Release** whose tag matches `chessroom-v*`
+   (e.g. `chessroom-v0.1.0`). That triggers the workflow, which builds and
+   publishes to PyPI. (`workflow_dispatch` can also run it manually.)
