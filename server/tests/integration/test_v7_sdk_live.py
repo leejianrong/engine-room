@@ -1,10 +1,10 @@
 """V7 sub-step 3 (contract, real uvicorn + real websockets): the *packaged*
-chessroom SDK driven against the real server.
+engineroom SDK driven against the real server.
 
 This is the honest test of a decoupled client (ADR-0021): the SDK speaks only the
 wire protocol, so we run its actual code against a live server rather than mocking
 either side. The SDK source is imported from the sibling monorepo package
-(`sdk/chessroom`); it is a separate uv project with no `engine_room` dependency
+(`sdk/engineroom`); it is a separate uv project with no `engine_room` dependency
 (asserted by the SDK's own boundary test).
 
 - The SDK's RandomBot plays a full greeter game (Kind-2 ephraim-bot) to game_over,
@@ -28,12 +28,12 @@ from engine_room.protocol.messages import BotInfo
 
 # Import the packaged SDK from the monorepo sibling package (V7 Q1: it lives here
 # as a decoupled package until it's extracted/published — O-2).
-_SDK_SRC = pathlib.Path(__file__).resolve().parents[3] / "sdk" / "chessroom" / "src"
+_SDK_SRC = pathlib.Path(__file__).resolve().parents[3] / "sdk" / "engineroom" / "src"
 if str(_SDK_SRC) not in sys.path:
     sys.path.insert(0, str(_SDK_SRC))
 
-from chessroom import RandomBot  # noqa: E402
-from chessroom.transport import Transport, TransportClosed, WebSocketTransport  # noqa: E402
+from engineroom import RandomBot  # noqa: E402
+from engineroom.transport import Transport, TransportClosed, WebSocketTransport  # noqa: E402
 
 WS_PATH = "/api/bot/v1"
 _GREETER = dict(greeter_solo_wait_seconds=0.0, tick_interval_seconds=0.02)

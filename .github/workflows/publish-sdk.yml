@@ -1,10 +1,10 @@
-# Publish the `chessroom` Python SDK to PyPI via **trusted publishing** (OIDC,
+# Publish the `engineroom` Python SDK to PyPI via **trusted publishing** (OIDC,
 # tokenless — no API token stored anywhere). Fires when a GitHub Release whose
-# tag matches `chessroom-v*` is published (that tag scheme keeps SDK releases
+# tag matches `engineroom-v*` is published (that tag scheme keeps SDK releases
 # separate from any future server tags), or on a manual `workflow_dispatch`.
 #
 # ONE-TIME human setup is required before the first run — see the "Publishing /
-# Releasing" section of sdk/chessroom/README.md (register the PyPI project + a
+# Releasing" section of sdk/engineroom/README.md (register the PyPI project + a
 # Trusted Publisher pointing at this repo/workflow/`pypi` environment, and create
 # the `pypi` GitHub Environment).
 name: Publish SDK
@@ -19,14 +19,14 @@ jobs:
     # Only Releases tagged for the SDK; workflow_dispatch runs unconditionally.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      startsWith(github.event.release.tag_name, 'chessroom-v')
+      startsWith(github.event.release.tag_name, 'engineroom-v')
     runs-on: ubuntu-latest
     environment: pypi          # scopes the OIDC identity PyPI trusts
     permissions:
       id-token: write          # mint the OIDC token for trusted publishing
     defaults:
       run:
-        working-directory: sdk/chessroom
+        working-directory: sdk/engineroom
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -39,4 +39,4 @@ jobs:
       - name: Publish to PyPI (trusted publishing / OIDC)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: sdk/chessroom/dist
+          packages-dir: sdk/engineroom/dist
