@@ -2,20 +2,31 @@ import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
+// Same-origin in dev (V8): with a relative API_BASE (''), proxy the API paths to the
+// backend on :8001 so there's no cross-origin CORS/cookie. The backend mounts
+// everything under /api (games, spectate SSE, bot WS, auth, users, bots); /auth +
+// /users are proxied too in case anything hits them bare. Applied to BOTH `vite dev`
+// (server) and `vite preview` (preview) — the Playwright e2e serves the built SPA via
+// `vite preview` on :5174 and needs the same proxy, since prod serves the SPA
+// same-origin from the backend (no proxy there).
+const apiProxy = {
+	'/api': { target: 'http://localhost:8001', changeOrigin: true, ws: true },
+	'/auth': { target: 'http://localhost:8001', changeOrigin: true },
+	'/users': { target: 'http://localhost:8001', changeOrigin: true }
+};
+
 export default defineConfig({
 	// Dev server on 5174 (5173 is used by another app); strict so it won't drift.
-	// Same-origin in dev too (V8): proxy the API paths to the backend on :8001 so a
-	// relative API_BASE ('') works and there's no cross-origin CORS/cookie in dev.
-	// The backend mounts everything under /api (games, spectate SSE, bot WS, auth,
-	// users, bots); /auth + /users are proxied too in case anything hits them bare.
 	server: {
 		port: 5174,
 		strictPort: true,
-		proxy: {
-			'/api': { target: 'http://localhost:8001', changeOrigin: true, ws: true },
-			'/auth': { target: 'http://localhost:8001', changeOrigin: true },
-			'/users': { target: 'http://localhost:8001', changeOrigin: true }
-		}
+		proxy: apiProxy
+	},
+	// Preview server (built SPA) — same proxy so the e2e is same-origin against :8001.
+	preview: {
+		port: 5174,
+		strictPort: true,
+		proxy: apiProxy
 	},
 	plugins: [
 		sveltekit({
