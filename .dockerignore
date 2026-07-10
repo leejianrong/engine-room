@@ -1,0 +1,19 @@
+# Root build context (V8): server/Dockerfile builds from the repo root so its Node
+# stage can reach frontend/. Keep the context lean — the per-package .dockerignore
+# files don't apply once the context is the root.
+.git
+.github
+.claude
+docs
+sdk
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/.env
+node_modules
+frontend/node_modules
+frontend/build
+frontend/.svelte-kit
+server/tests
