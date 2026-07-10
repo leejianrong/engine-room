@@ -15,20 +15,25 @@ where they disagree, and update the docs.
 | **V5 outcomes & ratings** | ✅ done — `resign`/`draw_offer`/`draw_accept` control messages (§7) route to a per-game control channel the loop always watches (arrive off-turn safely); resign → `resignation` (opponent wins); draw offer surfaced via `your_turn.opponent_draw_offer` (a move implicitly declines, ADR-0016 D6) + `draw_accept` → `agreement`; server **auto-draws** all standard conditions incl. claimable threefold/fifty via `board.outcome(claim_draw=True)` (D8, no claim protocol); **timeout vs insufficient material → DRAW** (D7); **real Elo** (K=32 provisional <30 games / K=16, `ER_ELO_*`) computed + `bots.rating`/`games_played` + per-color `games` rating cols all written in ONE finalize txn (ADR-0025 #5); `game_over.rating` carries real {before,after}; ABORTED still writes no rating. Migration **0003** (first since 0002). House games rate both bots uniformly |
 | **V6 spectator UX** | ✅ done — anonymous lobby `GET /api/games` (active from the in-memory registry + last-20 finished from Postgres) polled by a SvelteKit dashboard; **catch-up snapshot** as the first SSE event (`Game.spectator_snapshot()` from `LiveState`, subscribe-before-read; client dedups the join move by `ply`); **replay from move 1** over one uniform `[{ply,san,uci,fen}]` list — live from `LiveState.moves`, finished from the stored PGN via `GET /api/games/{id}`; **styled board** (`lib/Board.svelte`) + watch route (`/watch?game=`) with live-follow/scrub replay controls; **rating change on the SSE `game_over`** (Q6); **ambient Kind-1 house-vs-house bots** (`AmbientSupervisor`) keep the lobby never-empty — **rated + persisted** via the normal launcher, respawn on finish, evicted from the registry when done; row-locked finalizer (`with_for_update`) under concurrent ambient finalize. Migration **0004** (data-only house-bot seed). Playwright smoke e2e (dashboard→watch→replay) adopted (Phase D) |
 | **Post-MVP: house-bot personas** | ✅ done — split the shared house identity into two personas (`game/house_bots.py`): the **ephemeral greeter** is `ephraim-bot` (`RandomBot`, easy/one-off, its rating drift ignored); the **permanent ambient** residents are `jian-bot-001` / `jian-bot-002` (`MinimaxBot` — depth-`ER_AMBIENT_MINIMAX_DEPTH`, default 3 — so lobby games look like real chess). Migration **0005** seeds `ephraim-bot` + renames the two ambient rows (IDs kept for FK/history). Still in-process (out-of-process house-bot runners deferred) |
-| **V7 hero onboarding** | ✅ done — packaged **`chessroom` SDK** (`sdk/chessroom`, own `uv`/pyproject, **zero `engine_room` imports** — decoupled by the wire contract, ADR-0021, AST-boundary-tested): subclass `Bot` + implement `choose_move(board)`, call `run()`; the run loop (extracted from `devtools/demo_bot`) hides the whole protocol — handshake, auto-seek, `your_turn`→`move`→`move_ack`, heartbeat pong (§10), `ply`-idempotent resend (§9), reconnect-resume (§8); `choose_move` may return `RESIGN`/`ACCEPT_DRAW` (§7). Reference bots `RandomBot`/`MinimaxBot` (mirror the house bots' logic, not shared-imported); **UCI bridge** `UCIBot` + `chessroom-uci` console script (points Stockfish at the platform, client-side). **`uv` quickstart template** (`sdk/quickstart`: `random_bot.py` + `.env.example` + README + optional Dockerfile) — `git clone → uv sync → paste key → uv run → playing`; `make sdk-bot` runs it. Config via `CHESSROOM_KEY`/`CHESSROOM_URL`. Tests: SDK unit over an in-memory fake transport, a live-server contract test (packaged SDK vs the real server, incl. real reconnect + persistence), and an **SDK-fed Playwright e2e** (the ADR-0023 signup→SDK→watch smoke, now real). **Monorepo-package-first**; standalone-repo split + PyPI publish deferred (V7 O-2). No schema change |
+| **V7 hero onboarding** | ✅ done — packaged **`engineroom` SDK** (`sdk/engineroom`, own `uv`/pyproject, **zero `engine_room` imports** — decoupled by the wire contract, ADR-0021, AST-boundary-tested): subclass `Bot` + implement `choose_move(board)`, call `run()`; the run loop (extracted from `devtools/demo_bot`) hides the whole protocol — handshake, auto-seek, `your_turn`→`move`→`move_ack`, heartbeat pong (§10), `ply`-idempotent resend (§9), reconnect-resume (§8); `choose_move` may return `RESIGN`/`ACCEPT_DRAW` (§7). Reference bots `RandomBot`/`MinimaxBot` (mirror the house bots' logic, not shared-imported); **UCI bridge** `UCIBot` + `engineroom-uci` console script (points Stockfish at the platform, client-side). **`uv` quickstart template** (`sdk/quickstart`: `random_bot.py` + `.env.example` + README + optional Dockerfile) — `git clone → uv sync → paste key → uv run → playing`; `make sdk-bot` runs it. Config via `CHESSROOM_KEY`/`CHESSROOM_URL`. Tests: SDK unit over an in-memory fake transport, a live-server contract test (packaged SDK vs the real server, incl. real reconnect + persistence), and an **SDK-fed Playwright e2e** (the ADR-0023 signup→SDK→watch smoke, now real). **Monorepo-package-first**; standalone-repo split + PyPI publish deferred (V7 O-2). No schema change |
+| **V8 same-origin + SDK rename** | ✅ done — SPA **served same-origin by uvicorn** (Starlette `StaticFiles` + SPA fallback, `app.py`; **no nginx**), baked into the backend image → a **single Fly app** (`server/fly.toml`, repo-root build context; `fly deploy --config server/fly.toml`; separate frontend app retired) so **CORS is no longer required in prod** (KAN-68/KAN-64); human sessions now ride a **same-origin HttpOnly cookie** `er_session` (`CookieTransport` + stateless `JWTStrategy`, `auth/backend.py`), OAuth callback **302→`/bots`** with the cookie set; SDK **renamed `chessroom`→`engineroom`** (`sdk/engineroom`, `pip install engineroom`, `import engineroom`, `engineroom-uci`) with a PyPI trusted-publishing workflow (`.github/workflows/publish-sdk.yml`, tag `engineroom-v*`) — KAN-69/KAN-70. No schema change |
 
 Design is fully specified; see **docs/** (below). The build is sliced V1–V7 (Shape A,
-walking-skeleton-first) in `docs/shaping/`.
+walking-skeleton-first) in `docs/shaping/`; V8 is a post-MVP topology/rename wave (KAN-68/69/70).
 
 ## Stack & layout
 
 - **Backend** — Python + FastAPI + SQLAlchemy 2.0 async + Alembic + Postgres + `python-chess`; `uv`.
-- **Frontend** — TypeScript + SvelteKit + Vite (static SPA, SSE-driven).
+- **Frontend** — TypeScript + SvelteKit + Vite (static SPA, SSE-driven). **Served same-origin by
+  uvicorn** in prod (Starlette `StaticFiles` + SPA fallback in `app.py`, `ER_STATIC_DIR`) — no nginx.
+- **Deploy** — a **single Fly app** (`server/fly.toml`); the backend image bakes the built SPA
+  (repo-root Docker build context), so deploy from the repo root: `fly deploy --config server/fly.toml`.
+  The separate frontend Fly app was retired. See `docs/DEPLOY.md`.
 
 ```
-server/      FastAPI app (engine_room/), Alembic, tests/{unit,integration,support}
-frontend/    SvelteKit spectator UI
-sdk/         chessroom/ (packaged Python SDK, decoupled uv project) + quickstart/ (V7)
+server/      FastAPI app (engine_room/) — also serves the built SPA; Alembic, tests/{unit,integration,support}
+frontend/    SvelteKit spectator UI (built into the backend image)
+sdk/         engineroom/ (packaged Python SDK, decoupled uv project) + quickstart/ (V7)
 docs/        design/ (REQS, CONTEXT, PRD, PROTOCOL, QUESTIONS), adr/, shaping/
 docker-compose.yml   local Postgres on host :5433
 ```
@@ -59,8 +64,10 @@ cd frontend && npm run check                                         # svelte-ch
 ```
 
 **Ports:** backend **:8001**, frontend **:5174**, Postgres **:5433** (all moved off defaults to
-avoid collisions). Frontend → backend is **cross-origin via CORS** (see `config.py`
-`cors_allow_origins`), not a Vite proxy.
+avoid collisions). **Same-origin (V8, KAN-68):** in prod the SPA is served by uvicorn itself, so
+there's one origin and **CORS is not required**. In dev the Vite server on :5174 **proxies** `/api`,
+`/auth`, `/users` to :8001 (`frontend/vite.config.ts`), so dev is same-origin too. The CORS
+middleware + `config.py cors_allow_origins` are kept (harmless) only for hosting the SPA elsewhere.
 
 ## Testing (layered by cost — see docs/DEVELOPER-WORKFLOWS.md)
 
@@ -73,7 +80,7 @@ avoid collisions). Frontend → backend is **cross-origin via CORS** (see `confi
   smoke test (dashboard → watch → replay) that Playwright drives against a self-started
   backend+frontend (DB must be up + migrated). Phase D adopted. **V7** adds `e2e/sdk.spec.ts` — the
   ADR-0023 flow (mint a key → run the SDK's quickstart bot → watch it on the dashboard).
-- `sdk/chessroom/tests/` — the **SDK's own** fast unit tests (no infra): the run loop over an
+- `sdk/engineroom/tests/` — the **SDK's own** fast unit tests (no infra): the run loop over an
   in-memory fake transport + an import-boundary check. Its own `uv` project → a dedicated CI `sdk`
   job + pre-push line; `make test` runs it too. The packaged SDK is *also* run against the real
   server in `server/tests/integration/test_v7_sdk_live.py` (the contract test, needs Docker).
@@ -89,13 +96,16 @@ avoid collisions). Frontend → backend is **cross-origin via CORS** (see `confi
   `git push --no-verify` bypasses it for a one-off.
 - Prefer Claude Code `isolation: "worktree"` for parallel file-mutating agent work.
 
-## Auth (V2)
+## Auth (V2, cookie topology V8)
 
-- **Humans** sign in with GitHub OAuth → a stateless **JWT** (Bearer) session. Secrets:
+- **Humans** sign in with GitHub OAuth → a **same-origin HttpOnly cookie** `er_session`
+  (`CookieTransport` + a stateless `JWTStrategy`, `auth/backend.py`; the token is still a stateless
+  JWT — no session table, MVP R5). The browser sends it automatically same-origin (KAN-68), and JS
+  can't read it (XSS-hardened). The OAuth callback finishes by **302-redirecting to `/bots`** with the
+  cookie set (KAN-64) — login lands the human back in the SPA, not on a raw-JSON page. Secrets:
   `ER_AUTH_SECRET` (JWT + OAuth state), `ER_GITHUB_OAUTH_CLIENT_ID`/`_SECRET` (empty in dev/CI —
-  tests stub the provider). Bot management REST is auth-guarded + owner-scoped. The OAuth CSRF
-  cookie is `Secure` (HTTPS) by default; set `ER_OAUTH_COOKIE_SECURE=false` to run the real GitHub
-  flow over plain `http://localhost` in dev.
+  tests stub the provider). Bot management REST is auth-guarded + owner-scoped. Cookies are `Secure`
+  (HTTPS) by default; set `ER_OAUTH_COOKIE_SECURE=false` to run over plain `http://localhost` in dev.
 - **Bots** authenticate the WS handshake with a per-bot key `crbk_<43 base62>` in
   `Authorization: Bearer`. Stored only as `HMAC-SHA256(ER_API_KEY_PEPPER, key)`; shown once;
   rotation invalidates instantly + boots the live session (newest-wins). `ER_API_KEY_PEPPER` and
