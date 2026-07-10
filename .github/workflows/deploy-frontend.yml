@@ -1,0 +1,42 @@
+# Deploy the static frontend (SvelteKit SPA) to Fly.io — mirrors deploy.yml
+# (the backend). Decoupled from CI via `workflow_run` so it runs only after CI
+# *completes successfully on main*, deploying the exact validated commit (not
+# "latest main"). Disarmed by default: set repo variable FRONTEND_DEPLOY_ENABLED=true
+# and secret FLY_FRONTEND_API_TOKEN to turn it on (see docs/DEPLOY.md §7).
+#
+# Token: a SEPARATE app-scoped token (FLY_FRONTEND_API_TOKEN), not the backend's
+# FLY_API_TOKEN. The backend token is `fly tokens create deploy` scoped to the
+# "engine-room" app and cannot reach the "engine-room-web" app; least-privilege
+# says the frontend gets its own app-scoped deploy token. (An org-scoped token
+# could serve both, but scoping each app is cleaner and safer.)
+#
+# VITE_API_BASE (the backend URL baked into the browser bundle) is pinned in
+# frontend/fly.toml [build.args] — no --build-arg needed here.
+name: Deploy frontend
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  deploy:
+    # Only on a green CI run for main, and only once armed.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      vars.FRONTEND_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-frontend-production   # distinct from the backend's deploy-production
+      cancel-in-progress: true            # a newer merge supersedes an in-flight deploy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}  # the commit CI validated
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy to Fly
+        working-directory: frontend                        # fly.toml + Dockerfile live here
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_FRONTEND_API_TOKEN }}
