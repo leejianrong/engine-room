@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
+from .auth.backend import auth_backend
 from .auth.deps import fastapi_users
 from .auth.oauth import make_github_oauth_router
 from .auth.schemas import UserRead, UserUpdate
@@ -257,6 +258,15 @@ def create_app(
     app.include_router(
         make_github_oauth_router(),
         prefix="/api/auth/github",
+        tags=["auth"],
+    )
+    # Login/logout for the cookie session backend (KAN-64). We only use `/logout`
+    # (the SPA's Sign-out button POSTs it to clear the `er_session` cookie); the
+    # human /login flow is GitHub OAuth above. Cookie auth reads the cookie
+    # automatically, so `current_active_user` needs nothing else here.
+    app.include_router(
+        fastapi_users.get_auth_router(auth_backend),
+        prefix="/api/auth/jwt",
         tags=["auth"],
     )
     app.include_router(

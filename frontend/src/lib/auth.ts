@@ -1,13 +1,12 @@
-// Human sign-in (GitHub OAuth → stateless Bearer JWT, ADR-0013 / V2 auth).
+// Human sign-in (GitHub OAuth → HttpOnly cookie session, ADR-0013 / KAN-64).
 //
-// The JWT is kept client-side in localStorage and sent as `Authorization:
-// Bearer <jwt>` on the bot-management REST calls. This is a static SPA (SSR
-// disabled), so every storage access is guarded for the browser.
+// Since KAN-64 the session is a same-origin HttpOnly cookie (`er_session`): the
+// backend serves this SPA (KAN-68), so the browser sends the cookie automatically
+// on every API call — no token in JS, no `Authorization` header to plumb. Login
+// is a full-page redirect through GitHub that lands back on /bots with the cookie
+// set; sign-out POSTs the logout endpoint to clear it.
 
-import { browser } from '$app/environment';
 import { API_BASE } from './api';
-
-const TOKEN_KEY = 'er_jwt';
 
 // The current human, as returned by GET /api/users/me (FastAPI-Users UserRead).
 export type User = {
@@ -29,29 +28,9 @@ export class ApiError extends Error {
 	}
 }
 
-export function getToken(): string | null {
-	return browser ? localStorage.getItem(TOKEN_KEY) : null;
-}
-
-export function setToken(token: string): void {
-	if (browser) localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-	if (browser) localStorage.removeItem(TOKEN_KEY);
-}
-
-// Auth header for REST calls; empty when signed out (server then 401s).
-export function authHeaders(): Record<string, string> {
-	const t = getToken();
-	return t ? { Authorization: `Bearer ${t}` } : {};
-}
-
 // Kick off GitHub OAuth: ask the backend for the provider authorize URL, then
 // hand the browser to GitHub. After consent, GitHub redirects to the backend
-// callback, which issues the session JWT. See README / PR notes on how the JWT
-// reaches the SPA (the FastAPI-Users callback currently answers with a JSON
-// `{access_token}` body; `captureTokenFromUrl` bridges a redirect variant).
+// callback, which sets the session cookie and 302-redirects back to /bots.
 export async function startGitHubLogin(): Promise<void> {
 	const resp = await fetch(`${API_BASE}/api/auth/github/authorize`);
 	if (!resp.ok) throw new ApiError(resp.status, `authorize failed (${resp.status})`);
@@ -59,23 +38,16 @@ export async function startGitHubLogin(): Promise<void> {
 	window.location.href = authorization_url;
 }
 
-// If the JWT came back in the URL (?access_token=… or #access_token=…), persist
-// it and scrub the URL. Returns true when a token was captured.
-export function captureTokenFromUrl(): boolean {
-	if (!browser) return false;
-	const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-	const query = new URLSearchParams(window.location.search);
-	const token = hash.get('access_token') ?? query.get('access_token');
-	if (!token) return false;
-	setToken(token);
-	history.replaceState(null, '', window.location.pathname);
-	return true;
+// Clear the session cookie server-side, then drop to signed-out. Best-effort:
+// the cookie backend answers 204 and clears `er_session`.
+export async function logout(): Promise<void> {
+	await fetch(`${API_BASE}/api/auth/jwt/logout`, { method: 'POST' });
 }
 
-// Validate the stored token by resolving the current user. Throws ApiError(401)
-// when missing/expired so the UI can drop to the signed-out state.
+// Resolve the current user via the session cookie (sent automatically). Throws
+// ApiError(401) when the cookie is missing/expired so the UI drops to signed-out.
 export async function fetchMe(): Promise<User> {
-	const resp = await fetch(`${API_BASE}/api/users/me`, { headers: authHeaders() });
+	const resp = await fetch(`${API_BASE}/api/users/me`);
 	if (resp.status === 401) throw new ApiError(401, 'not signed in');
 	if (!resp.ok) throw new ApiError(resp.status, `me failed (${resp.status})`);
 	return (await resp.json()) as User;

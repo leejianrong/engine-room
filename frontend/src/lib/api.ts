@@ -6,7 +6,7 @@
 // One place for the base URL, the typed shapes the spectator UI consumes, and the
 // fetch/EventSource helpers (V6).
 
-import { ApiError, authHeaders } from './auth';
+import { ApiError } from './auth';
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -76,7 +76,7 @@ export function fmtTimeControl(tc: TimeControl): string {
 	return `${Math.round(tc.base_seconds / 60)}+${tc.increment_seconds}`;
 }
 
-// ── Bot management (V2 REST, owner-scoped, Bearer JWT) ──────────────────────
+// ── Bot management (V2 REST, owner-scoped, same-origin cookie session) ──────
 
 // A bot as returned by the API — never the secret key, only the display prefix.
 export type Bot = {
@@ -92,11 +92,12 @@ export type Bot = {
 export type BotWithKey = Bot & { api_key: string };
 
 async function botFetch(path: string, init: RequestInit = {}): Promise<Response> {
+	// Same-origin: the browser sends the `er_session` cookie automatically, so no
+	// auth header is needed here.
 	const resp = await fetch(`${API_BASE}/api/bots${path}`, {
 		...init,
 		headers: {
 			'Content-Type': 'application/json',
-			...authHeaders(),
 			...(init.headers ?? {})
 		}
 	});

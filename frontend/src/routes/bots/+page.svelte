@@ -1,14 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		ApiError,
-		captureTokenFromUrl,
-		clearToken,
-		fetchMe,
-		setToken,
-		startGitHubLogin,
-		type User
-	} from '$lib/auth';
+	import { ApiError, fetchMe, logout, startGitHubLogin, type User } from '$lib/auth';
 	import {
 		createBot,
 		deleteBot,
@@ -35,10 +27,6 @@
 	let revealed = $state<BotWithKey | null>(null);
 	let revealKind = $state<'created' | 'rotated'>('created');
 	let copied = $state(false);
-
-	// dev fallback: paste a JWT directly (OAuth can't be exercised locally)
-	let pasteToken = $state('');
-	let showPaste = $state(false);
 
 	const atCap = $derived(bots.length >= MAX_BOTS);
 
@@ -132,16 +120,8 @@
 		}
 	}
 
-	function useToken() {
-		if (!pasteToken.trim()) return;
-		setToken(pasteToken.trim());
-		pasteToken = '';
-		showPaste = false;
-		load();
-	}
-
-	function signOut() {
-		clearToken();
+	async function signOut() {
+		await logout();
 		bots = [];
 		user = null;
 		signedOut = true;
@@ -158,7 +138,6 @@
 	}
 
 	onMount(() => {
-		captureTokenFromUrl();
 		load();
 	});
 </script>
@@ -195,24 +174,6 @@
 		<section class="signin">
 			<p>You're not signed in.</p>
 			<button class="primary" onclick={signIn}>Sign in with GitHub</button>
-
-			<p class="hint">
-				GitHub OAuth needs backend secrets that aren't present in local dev. To try the screens
-				now, paste a session JWT (a Bearer token from the backend).
-			</p>
-			{#if showPaste}
-				<div class="paste">
-					<input
-						type="text"
-						placeholder="Paste JWT…"
-						bind:value={pasteToken}
-						autocomplete="off"
-					/>
-					<button onclick={useToken} disabled={!pasteToken.trim()}>Use token</button>
-				</div>
-			{:else}
-				<button class="link" onclick={() => (showPaste = true)}>Paste a token instead</button>
-			{/if}
 		</section>
 	{:else}
 		<section>
@@ -461,16 +422,6 @@
 		font-size: 0.85rem;
 		max-width: 32rem;
 		margin: 1rem auto 0.5rem;
-	}
-	.paste {
-		display: flex;
-		gap: 0.5rem;
-		justify-content: center;
-		flex-wrap: wrap;
-	}
-	.paste input {
-		flex: 1 1 20rem;
-		max-width: 28rem;
 	}
 	.empty,
 	.error {
