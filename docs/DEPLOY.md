@@ -80,7 +80,9 @@ Register an OAuth app at github.com → Settings → Developer settings → OAut
 
 Copy the client id/secret into the secrets in step 3. Sign-in flow:
 `GET https://<your-app-name>.fly.dev/api/auth/github/authorize` → redirects to GitHub →
-callback returns a Bearer JWT.
+the callback sets an HttpOnly `er_session` cookie (same-origin) and 302-redirects the browser
+to `/bots`, so the human lands back in the SPA already authenticated (see
+`server/engine_room/auth/backend.py` `RedirectCookieTransport`).
 
 ## 6. Arm CI-gated deploys (optional, recommended)
 After the first manual deploy works, let CI deploy every green `main`:
