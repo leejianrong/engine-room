@@ -1,4 +1,4 @@
-"""Constants, sentinels, and errors for the chessroom SDK.
+"""Constants, sentinels, and errors for the engineroom SDK.
 
 These re-derive from the public wire protocol (docs/design/PROTOCOL.md); the SDK
 never imports server code (ADR-0021).
@@ -22,7 +22,7 @@ __all__ = [
 # a supported range and replies VERSION_UNSUPPORTED if we're out of range.
 PROTOCOL_VERSION = "1.0"
 SDK_VERSION = "0.1.0"
-SDK_UA = f"chessroom-py/{SDK_VERSION}"
+SDK_UA = f"engineroom-py/{SDK_VERSION}"
 
 # Default WebSocket endpoint — the live platform (PROTOCOL §1, major version in the
 # path). Override with CHESSROOM_URL or Bot(url=...) for local dev
@@ -40,7 +40,7 @@ class _Sentinel:
         self._name = name
 
     def __repr__(self) -> str:  # pragma: no cover - trivial
-        return f"chessroom.{self._name}"
+        return f"engineroom.{self._name}"
 
 
 #: Return from ``choose_move`` to resign the game (opponent wins). PROTOCOL §7.

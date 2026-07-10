@@ -6,7 +6,7 @@ it. ``UCIBot`` delegates ``choose_move`` to a local engine subprocess via
 it does NOT reintroduce native UCI on the server. Stockfish is not bundled; supply
 your own engine binary.
 
-    chessroom-uci --engine /usr/bin/stockfish --think-time 0.1
+    engineroom-uci --engine /usr/bin/stockfish --think-time 0.1
 
 Reads ``CHESSROOM_KEY`` / ``CHESSROOM_URL`` from the environment like any bot.
 """
@@ -70,7 +70,7 @@ class UCIBot(Bot):
 
 def main() -> None:
     p = argparse.ArgumentParser(
-        prog="chessroom-uci",
+        prog="engineroom-uci",
         description="Point a local UCI engine at Engine Room.",
     )
     p.add_argument("--engine", required=True, help="path to a UCI engine binary (e.g. stockfish)")

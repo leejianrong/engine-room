@@ -1,7 +1,7 @@
 """Your first Engine Room bot.
 
 A RandomBot: it plays a uniformly-random legal move. That's the whole bot — the
-`chessroom` SDK handles the connection, matchmaking, clocks, reconnects, and the
+`engineroom` SDK handles the connection, matchmaking, clocks, reconnects, and the
 wire protocol for you.
 
 Run it:
@@ -18,7 +18,7 @@ import random
 
 from dotenv import load_dotenv
 
-from chessroom import Bot
+from engineroom import Bot
 
 load_dotenv()  # read CHESSROOM_KEY / CHESSROOM_URL from .env
 

@@ -84,7 +84,7 @@ class Bot:
     # ------------------------------------------------------------------ hooks
     def choose_move(self, board: chess.Board) -> Decision:
         """Return the move to play as a ``chess.Move`` or a UCI string, or a
-        control sentinel (``chessroom.RESIGN`` / ``chessroom.ACCEPT_DRAW``)."""
+        control sentinel (``engineroom.RESIGN`` / ``engineroom.ACCEPT_DRAW``)."""
         raise NotImplementedError
 
     def on_game_start(self, info: GameStart) -> None:  # noqa: D401 - optional hook
@@ -123,7 +123,7 @@ class Bot:
             code = welcome.get("code")
             if code == "VERSION_UNSUPPORTED":
                 raise ProtocolError(
-                    "Server rejected this SDK's protocol version — upgrade chessroom."
+                    "Server rejected this SDK's protocol version — upgrade engineroom."
                 )
             raise ProtocolError(f"handshake failed: {welcome}")
         return welcome

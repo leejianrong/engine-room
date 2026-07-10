@@ -1,6 +1,6 @@
 # Engine Room quickstart — your first bot in minutes
 
-Zero to a live, watchable chess game. You write ~3 lines; the `chessroom` SDK does
+Zero to a live, watchable chess game. You write ~3 lines; the `engineroom` SDK does
 the rest (ADR-0022, target < 20 min).
 
 ## Steps
@@ -35,8 +35,8 @@ class RandomBot(Bot):
 ```
 
 Return any legal move (a `chess.Move` or a UCI string). Try material-counting,
-then search. When you're ready, the SDK also ships `chessroom.MinimaxBot` and a
-`chessroom-uci` bridge to point an engine like Stockfish at the platform.
+then search. When you're ready, the SDK also ships `engineroom.MinimaxBot` and a
+`engineroom-uci` bridge to point an engine like Stockfish at the platform.
 
 ## Local dev
 
