@@ -12,8 +12,8 @@ import chess
 import pytest
 from fakeserver import FakeServer
 
-import chessroom
-from chessroom import ACCEPT_DRAW, RESIGN, Bot, RandomBot
+import engineroom
+from engineroom import ACCEPT_DRAW, RESIGN, Bot, RandomBot
 
 
 def _bot(server: FakeServer, cls=RandomBot, **kw) -> Bot:
@@ -62,7 +62,7 @@ async def test_move_returned_as_uci_string_is_accepted():
 async def test_missing_key_raises_config_error():
     server = FakeServer()
     bot = RandomBot(key=None, url="ws://x", connect=server.connect)
-    with pytest.raises(chessroom.ConfigError):
+    with pytest.raises(engineroom.ConfigError):
         await bot._run(loop=False)
 
 
@@ -129,5 +129,5 @@ async def test_accept_draw_sentinel_agrees_to_a_draw():
 def test_reference_bots_pick_legal_moves():
     board = chess.Board()
     assert RandomBot(key="k").choose_move(board) in board.legal_moves
-    uci = chessroom.MinimaxBot(key="k").choose_move(board)
+    uci = engineroom.MinimaxBot(key="k").choose_move(board)
     assert chess.Move.from_uci(uci) in board.legal_moves

@@ -35,10 +35,10 @@ jobs:
       - run: uv run --frozen pytest tests/unit -q
 
   sdk:
-    runs-on: ubuntu-latest # chessroom SDK: its own decoupled uv project (V7)
+    runs-on: ubuntu-latest # engineroom SDK: its own decoupled uv project (V7)
     defaults:
       run:
-        working-directory: sdk/chessroom
+        working-directory: sdk/engineroom
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

@@ -1,5 +1,5 @@
 [project]
-name = "chessroom"
+name = "engineroom"
 version = "0.1.0"
 description = "Official Python SDK for Engine Room — write a chess bot, connect it to the live platform"
 readme = "README.md"
@@ -32,12 +32,12 @@ dependencies = [
 # (V7 Q1) and will be extracted to a standalone published repo later (V7 O-2).
 
 [project.scripts]
-chessroom-uci = "chessroom.uci:main"
+engineroom-uci = "engineroom.uci:main"
 
 [project.urls]
 Homepage = "https://engine-room.fly.dev"
 Repository = "https://github.com/leejianrong/engine-room"
-Documentation = "https://github.com/leejianrong/engine-room/blob/main/sdk/chessroom/README.md"
+Documentation = "https://github.com/leejianrong/engine-room/blob/main/sdk/engineroom/README.md"
 Protocol = "https://github.com/leejianrong/engine-room/blob/main/docs/design/PROTOCOL.md"
 Changelog = "https://github.com/leejianrong/engine-room/releases"
 Issues = "https://github.com/leejianrong/engine-room/issues"
@@ -61,7 +61,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/chessroom"]
+packages = ["src/engineroom"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -55,7 +55,7 @@ bot: ## Start random-mover games vs the house and print the watch URL (needs a r
 	cd server && uv run python -m engine_room.devtools.demo_bot --loop
 
 sdk-bot: ## Run the SDK quickstart RandomBot vs the house (mints a key; needs a running stack)
-	@echo "Minting a local key and starting the quickstart RandomBot via the chessroom SDK…"
+	@echo "Minting a local key and starting the quickstart RandomBot via the engineroom SDK…"
 	@KEY=$$(cd server && uv run python -m engine_room.devtools.mint_bot --quiet) && \
 	  cd sdk/quickstart && uv sync --quiet && \
 	  CHESSROOM_KEY=$$KEY CHESSROOM_URL=ws://localhost:8001/api/bot/v1 uv run python random_bot.py
@@ -76,7 +76,7 @@ down-clean: ## Like `down`, but also wipe the Postgres volume for a clean slate
 
 test: ## Fast gate: ruff + unit tests + svelte-check (server + SDK + frontend)
 	cd server && uv run ruff check . && uv run pytest tests/unit -q
-	cd sdk/chessroom && uv run ruff check . && uv run pytest -q
+	cd sdk/engineroom && uv run ruff check . && uv run pytest -q
 	cd frontend && npm run check
 
 e2e: migrate ## Playwright smoke: dashboard → watch → replay (starts backend+frontend itself)

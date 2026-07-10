@@ -1,4 +1,4 @@
-# chessroom — Python SDK for Engine Room
+# engineroom — Python SDK for Engine Room
 
 Write an AI chess bot in a few lines and play it live on
 [Engine Room](https://engine-room.fly.dev). You implement one method —
@@ -6,7 +6,7 @@ Write an AI chess bot in a few lines and play it live on
 WebSocket, matchmaking, reconnects, heartbeats, and the whole wire protocol.
 
 ```python
-from chessroom import Bot
+from engineroom import Bot
 import random
 
 class MyBot(Bot):
@@ -19,10 +19,10 @@ MyBot().run(loop=True)                    # reads CHESSROOM_KEY / CHESSROOM_URL
 ## Install
 
 ```bash
-pip install chessroom     # or: uv add chessroom
+pip install engineroom     # or: uv add engineroom
 ```
 
-> The package is developed in the Engine Room monorepo (`sdk/chessroom`) and
+> The package is developed in the Engine Room monorepo (`sdk/engineroom`) and
 > published to PyPI from there via the `publish-sdk` GitHub workflow (see
 > [Publishing / Releasing](#publishing--releasing)).
 
@@ -46,15 +46,15 @@ You never see a disconnect.
 
 ## Beyond `choose_move`
 
-- Return `chessroom.RESIGN` from `choose_move` to resign; when
-  `state.opponent_draw_offer` is set, return `chessroom.ACCEPT_DRAW` to agree a
+- Return `engineroom.RESIGN` from `choose_move` to resign; when
+  `state.opponent_draw_offer` is set, return `engineroom.ACCEPT_DRAW` to agree a
   draw (a normal move declines it).
 - Override `on_game_start(info)` / `on_game_over(result)` for optional callbacks.
 
 ## Reference bots
 
-- `chessroom.RandomBot` — the hello-world (uniformly random legal move).
-- `chessroom.MinimaxBot` — a depth-limited minimax + alpha-beta example.
+- `engineroom.RandomBot` — the hello-world (uniformly random legal move).
+- `engineroom.MinimaxBot` — a depth-limited minimax + alpha-beta example.
 
 ## UCI bridge
 
@@ -62,22 +62,22 @@ Point an existing UCI engine (e.g. Stockfish) at the platform — client-side, n
 server changes:
 
 ```bash
-CHESSROOM_KEY=crbk_... chessroom-uci --engine /usr/bin/stockfish --think-time 0.1
+CHESSROOM_KEY=crbk_... engineroom-uci --engine /usr/bin/stockfish --think-time 0.1
 ```
 
 ## Publishing / Releasing
 
-The SDK is published to [PyPI](https://pypi.org/project/chessroom/) by the
+The SDK is published to [PyPI](https://pypi.org/project/engineroom/) by the
 `.github/workflows/publish-sdk.yml` workflow using **trusted publishing** (OIDC):
 no API token is ever stored in the repo. The workflow builds the sdist + wheel
-from `sdk/chessroom/` with `uv build` and uploads them with
+from `sdk/engineroom/` with `uv build` and uploads them with
 `pypa/gh-action-pypi-publish` from the `pypi` GitHub Environment.
 
 ### One-time human setup (before the first release)
 
 1. **Create the PyPI project + Trusted Publisher.** On
    [pypi.org](https://pypi.org) → *Your projects* → *Publishing* → add a new
-   **pending publisher** for a project named `chessroom` with:
+   **pending publisher** for a project named `engineroom` with:
    - **Owner / repository:** `leejianrong/engine-room`
    - **Workflow name:** `publish-sdk.yml`
    - **Environment:** `pypi`
@@ -90,7 +90,7 @@ from `sdk/chessroom/` with `uv build` and uploads them with
 ### Cutting a release
 
 1. Bump the version in **both** `pyproject.toml` (`[project].version`) and
-   `src/chessroom/const.py` (`SDK_VERSION`) — keep them in lockstep — and merge to `main`.
-2. Publish a **GitHub Release** whose tag matches `chessroom-v*`
-   (e.g. `chessroom-v0.1.0`). That triggers the workflow, which builds and
+   `src/engineroom/const.py` (`SDK_VERSION`) — keep them in lockstep — and merge to `main`.
+2. Publish a **GitHub Release** whose tag matches `engineroom-v*`
+   (e.g. `engineroom-v0.1.0`). That triggers the workflow, which builds and
    publishes to PyPI. (`workflow_dispatch` can also run it manually.)

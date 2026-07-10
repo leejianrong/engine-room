@@ -1,4 +1,4 @@
-"""Decoupling boundary (ADR-0021): the chessroom package must not depend on any
+"""Decoupling boundary (ADR-0021): the engineroom package must not depend on any
 server code. A static AST scan of every module asserts no ``engine_room`` import —
 the contract is the wire protocol (PROTOCOL.md), never shared server code."""
 
@@ -7,7 +7,7 @@ from __future__ import annotations
 import ast
 import pathlib
 
-_PKG = pathlib.Path(__file__).resolve().parent.parent / "src" / "chessroom"
+_PKG = pathlib.Path(__file__).resolve().parent.parent / "src" / "engineroom"
 
 
 def _imported_names(path: pathlib.Path) -> set[str]:
@@ -39,7 +39,7 @@ def test_only_public_runtime_deps():
     for py in _PKG.rglob("*.py"):
         for name in _imported_names(py):
             top = name.split(".")[0]
-            if not top.startswith("chessroom"):
+            if not top.startswith("engineroom"):
                 seen.add(top)
     unexpected = seen - allowed
     assert not unexpected, f"unexpected imports: {unexpected}"

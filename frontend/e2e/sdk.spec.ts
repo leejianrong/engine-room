@@ -2,7 +2,7 @@ import { execSync, spawn, type ChildProcess } from 'node:child_process';
 
 import { expect, test } from '@playwright/test';
 
-// V7 end-to-end smoke (ADR-0023, now real): the *chessroom SDK* supplies the
+// V7 end-to-end smoke (ADR-0023, now real): the *engineroom SDK* supplies the
 // live game the dashboard watches. Mirrors the hero flow — mint a key, run the
 // quickstart RandomBot through the SDK, and watch it show up on the dashboard:
 //

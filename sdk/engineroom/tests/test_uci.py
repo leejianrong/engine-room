@@ -9,7 +9,7 @@ from __future__ import annotations
 import chess
 from fakeserver import FakeServer
 
-from chessroom.uci import UCIBot
+from engineroom.uci import UCIBot
 
 
 class _FakePlayResult:

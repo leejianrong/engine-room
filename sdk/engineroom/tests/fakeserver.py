@@ -17,7 +17,7 @@ import random
 
 import chess
 
-from chessroom.transport import Transport, TransportClosed
+from engineroom.transport import Transport, TransportClosed
 
 _CLOSE = object()
 

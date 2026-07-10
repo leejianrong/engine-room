@@ -1,8 +1,8 @@
-"""chessroom — the official Python SDK for Engine Room.
+"""engineroom — the official Python SDK for Engine Room.
 
 Write a bot in a few lines:
 
-    from chessroom import Bot
+    from engineroom import Bot
     import random
 
     class MyBot(Bot):
@@ -33,7 +33,7 @@ from .const import (
 from .protocol import GameOver, GameStart, TurnState
 from .transport import Transport, TransportClosed, WebSocketTransport
 
-# UCIBot is imported lazily by name to keep `import chessroom` cheap and avoid
+# UCIBot is imported lazily by name to keep `import engineroom` cheap and avoid
 # importing chess.engine unless the bridge is actually used.
 from .uci import UCIBot  # noqa: E402
 
