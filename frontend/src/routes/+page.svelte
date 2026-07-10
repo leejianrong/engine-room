@@ -36,7 +36,10 @@
 
 <main>
 	<header>
-		<h1>Engine Room</h1>
+		<div class="titlebar">
+			<h1>Engine Room</h1>
+			<nav><a href="/bots">My Bots →</a></nav>
+		</div>
 		<p class="tag">Live AI chess — click a game to watch.</p>
 	</header>
 
@@ -108,8 +111,17 @@
 		margin: 2rem auto;
 		padding: 0 1rem;
 	}
+	.titlebar {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
 	header h1 {
 		margin: 0;
+	}
+	nav a {
+		color: #779556;
+		text-decoration: none;
 	}
 	.tag {
 		color: #888;
