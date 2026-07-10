@@ -5,9 +5,12 @@ game engine mount here in later sub-steps.
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
 from .auth.deps import fastapi_users
@@ -39,6 +42,40 @@ from .spectate.games import router as games_router
 from .spectate.sse import router as spectate_router
 from .ws.bot_endpoint import router as bot_router
 from .ws.session_registry import SessionRegistry
+
+
+class _SPAStaticFiles(StaticFiles):
+    """StaticFiles that falls back to index.html on a 404 (client-side routing).
+
+    The SvelteKit SPA owns its own routes (e.g. `/watch`, `/bots`); a browser deep
+    link to one of those is an unknown *file* to StaticFiles, so we serve index.html
+    (200) and let the client router take over. Real assets (`/_app/...`) still serve
+    normally. Mounted LAST (see `_mount_spa`) so every API route wins first.
+    """
+
+    async def get_response(self, path, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
+def _mount_spa(app: FastAPI, static_dir: str) -> None:
+    """Mount the built SPA at `/` iff `static_dir` holds an index.html.
+
+    Gated on the build existing so the API-only app (dev/tests without a frontend
+    build) still boots. Registered AFTER all API routers + `/docs` so the catch-all
+    never shadows `/api/*`, `/health`, the WS/SSE endpoints, or the OpenAPI routes —
+    Starlette matches routes in registration order, first match wins.
+    """
+    if not static_dir:
+        return
+    root = Path(static_dir)
+    if not (root / "index.html").is_file():
+        return
+    app.mount("/", _SPAStaticFiles(directory=root, html=True), name="spa")
 
 
 @asynccontextmanager
@@ -90,6 +127,7 @@ def create_app(
     always_pair: bool = False,
     matcher_kwargs: dict | None = None,
     hb_kwargs: dict | None = None,
+    static_dir: str | None = None,
 ) -> FastAPI:
     """Application factory.
 
@@ -114,6 +152,9 @@ def create_app(
     settings-derived tuning (TTL, greeter, tick interval) for tests. `hb_kwargs`
     overrides the heartbeat tuning (`ping_interval_seconds`,
     `liveness_timeout_seconds`) so liveness tests use tiny values (V4).
+
+    `static_dir` (V8) is the built SvelteKit SPA directory served same-origin (no
+    nginx). None → `settings.static_dir` (empty in dev/tests → API-only, no mount).
     """
     app = FastAPI(title="Engine Room", version=__version__, lifespan=_lifespan)
 
@@ -224,6 +265,10 @@ def create_app(
         tags=["users"],
     )
     app.include_router(bots_router)
+
+    # Same-origin SPA (V8, KAN-68): mount the built SvelteKit app LAST so its
+    # client-routing catch-all never shadows the API/WS/SSE routes or /docs above.
+    _mount_spa(app, settings.static_dir if static_dir is None else static_dir)
     return app
 
 

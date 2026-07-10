@@ -10,14 +10,20 @@
 # docs/DEPLOY.md). Migrations run on container start via the Dockerfile CMD.
 #
 # Rename `app` to your Fly app and set `primary_region` to your nearest region
-# (`fly platform regions`). Deploy: `cd server && fly deploy` (or via CI, see
-# .github/workflows/deploy.yml).
+# (`fly platform regions`).
+#
+# Single origin (V8, KAN-68): the SPA is built into this image, so the Docker build
+# context must be the REPO ROOT (server/Dockerfile's Node stage COPYs frontend/).
+# Deploy FROM THE REPO ROOT so the context includes frontend/:
+#   fly deploy --config server/fly.toml
+# (`dockerfile` below is relative to that root context.) CI's deploy.yml does the
+# same. There is no longer a separate frontend Fly app.
 
 app = "engine-room"
 primary_region = "sin"
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = "server/Dockerfile"
 
 [http_service]
   internal_port = 8001          # matches the Dockerfile CMD (uvicorn --port 8001)
@@ -27,7 +33,9 @@ primary_region = "sin"
   min_machines_running = 1
 
   [http_service.concurrency]
-    type = "requests"
+    # `connections` (not `requests`): bot sockets are long-lived WebSockets + humans
+    # hold open SSE streams, so connection count is the meaningful load signal here.
+    type = "connections"
     soft_limit = 200
     hard_limit = 250
 

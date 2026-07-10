@@ -26,7 +26,12 @@ services:
 
   backend:
     profiles: ["app", "demo"]
-    build: ./server
+    # Repo-root context (V8): server/Dockerfile builds the SPA into the image, so it
+    # needs frontend/ in scope. The compose `frontend` service below still serves the
+    # SPA on :5174 for local dev; the backend also serves it same-origin on :8001.
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     depends_on:
       db:
         condition: service_healthy
@@ -57,7 +62,9 @@ services:
   # default ER_API_KEY_PEPPER so the minted key authenticates.
   demo-bot:
     profiles: ["demo"]
-    build: ./server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     depends_on:
       - backend
     environment:

@@ -26,7 +26,8 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}  # the commit CI validated
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Deploy to Fly
-        working-directory: server                          # fly.toml + Dockerfile live here
-        run: flyctl deploy --remote-only
+        # Repo-root context (V8): server/Dockerfile bakes the SPA in, so the build
+        # context must include frontend/. Deploy from the root with the config path.
+        run: flyctl deploy --remote-only --config server/fly.toml
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

@@ -93,12 +93,22 @@ class Settings(BaseSettings):
     # http://localhost in dev, where a Secure cookie would otherwise be dropped.
     oauth_cookie_secure: bool = True
 
-    # Browser origins allowed to call the API (spectator SSE from the SvelteKit
-    # dev server on :5174). Override with ER_CORS_ALLOW_ORIGINS as a JSON list.
+    # Browser origins allowed to call the API. Since V8 the SPA is served from THIS
+    # app (same-origin), so CORS is no longer load-bearing in prod — it's kept only
+    # for anyone hosting the frontend on a separate origin. The dev-server default
+    # covers a bare `npm run dev` without the Vite proxy. Override with
+    # ER_CORS_ALLOW_ORIGINS as a JSON list.
     cors_allow_origins: list[str] = [
         "http://localhost:5174",
         "http://127.0.0.1:5174",
     ]
+
+    # Built SvelteKit SPA directory served same-origin by this app (V8, KAN-68).
+    # When set to a dir containing index.html, uvicorn serves the static assets and
+    # an SPA fallback (no nginx). Empty (dev/tests without a build) → not mounted,
+    # so the API-only app still boots. The backend image bakes the build in and sets
+    # ER_STATIC_DIR to it.
+    static_dir: str = ""
 
     # --- V3 matchmaking (slice A3, ADR-0011/0012/0016 E8) ---
     # Elo widening window: half-width starts at ±`mm_window_start`, grows by
