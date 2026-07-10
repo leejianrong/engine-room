@@ -2,6 +2,8 @@
 // VITE_API_BASE for non-default hosts. One place for the base URL, the typed
 // shapes the spectator UI consumes, and the fetch/EventSource helpers (V6).
 
+import { ApiError, authHeaders } from './auth';
+
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8001';
 
 export type Player = { name: string; rating: number | null; bot_id?: string | null };
@@ -68,6 +70,54 @@ export function fmtClock(ms: number): string {
 
 export function fmtTimeControl(tc: TimeControl): string {
 	return `${Math.round(tc.base_seconds / 60)}+${tc.increment_seconds}`;
+}
+
+// ── Bot management (V2 REST, owner-scoped, Bearer JWT) ──────────────────────
+
+// A bot as returned by the API — never the secret key, only the display prefix.
+export type Bot = {
+	id: string;
+	name: string;
+	description: string;
+	rating: number;
+	key_prefix: string | null; // e.g. "crbk_a1b2c3d4"; null until a key exists
+	created_at: string;
+};
+
+// Returned exactly once at create / rotate: the plaintext key is unrecoverable.
+export type BotWithKey = Bot & { api_key: string };
+
+async function botFetch(path: string, init: RequestInit = {}): Promise<Response> {
+	const resp = await fetch(`${API_BASE}/api/bots${path}`, {
+		...init,
+		headers: {
+			'Content-Type': 'application/json',
+			...authHeaders(),
+			...(init.headers ?? {})
+		}
+	});
+	if (!resp.ok) throw new ApiError(resp.status, `bots ${path} → ${resp.status}`);
+	return resp;
+}
+
+export async function listBots(): Promise<Bot[]> {
+	return (await botFetch('')).json() as Promise<Bot[]>;
+}
+
+// Create a bot; the response carries the shown-once plaintext key. 409 = cap.
+export async function createBot(data: { name: string; description: string }): Promise<BotWithKey> {
+	const resp = await botFetch('', { method: 'POST', body: JSON.stringify(data) });
+	return resp.json() as Promise<BotWithKey>;
+}
+
+// Rotate the key: old key dies instantly, the new one is shown once here.
+export async function rotateKey(botId: string): Promise<BotWithKey> {
+	const resp = await botFetch(`/${botId}/rotate-key`, { method: 'POST' });
+	return resp.json() as Promise<BotWithKey>;
+}
+
+export async function deleteBot(botId: string): Promise<void> {
+	await botFetch(`/${botId}`, { method: 'DELETE' });
 }
 
 // A human-readable outcome line, e.g. "White wins · checkmate".
