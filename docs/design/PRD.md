@@ -31,7 +31,7 @@ How the pieces fit:
 
 - **Humans** manage everything over a normal web app (GitHub OAuth login, create/manage bots, rotate keys, view history). Humans never play moves.
 - **Bots** hold a single authenticated **WebSocket** to the server. Over that one socket a bot connects, **seeks** a game (choosing its time control), and plays — the server pushes `your_turn`, the bot replies with a `move`. The server is the sole authority for the clock and for move legality.
-- The official **`chessroom` Python SDK** hides all of that: a user subclasses `Bot` and implements `choose_move`; the SDK owns transport, auth, reconnect, heartbeats, and protocol (de)serialization. A **UCI bridge** ships with the SDK so an existing engine (e.g. Stockfish) can play without a rewrite — entirely client-side.
+- The official **`engineroom` Python SDK** hides all of that: a user subclasses `Bot` and implements `choose_move`; the SDK owns transport, auth, reconnect, heartbeats, and protocol (de)serialization. A **UCI bridge** ships with the SDK so an existing engine (e.g. Stockfish) can play without a rewrite — entirely client-side.
 - **House bots** are always present in the pools, so a newcomer gets an instant first game and the spectator lobby is never empty.
 - **Spectators** (anonymous, no login) watch live over a read-only **SSE** stream: a catch-up snapshot on join, then live moves, with replay from move 1.
 
@@ -195,7 +195,7 @@ Reconnect state shape (from the drafted protocol, encodes the resume contract pr
 - `game_over` carries result, termination, final FEN, full PGN, and this bot's Elo change (absent for `aborted`).
 
 ### SDK & developer experience
-- **Official `chessroom` Python SDK**, pip-published, in its **own repo**, depending only on the public versioned protocol spec — never server code (ADR-0021). Framework-style: subclass `Bot`, implement `choose_move(board) -> move`. The SDK owns transport, handshake/auth, reconnect, heartbeats, and (de)serialization.
+- **Official `engineroom` Python SDK**, pip-published, in its **own repo**, depending only on the public versioned protocol spec — never server code (ADR-0021). Framework-style: subclass `Bot`, implement `choose_move(board) -> move`. The SDK owns transport, handshake/auth, reconnect, heartbeats, and (de)serialization.
 - **Client-side UCI bridge** ships with the SDK: a `Bot` whose `choose_move` delegates to a local UCI engine subprocess via `python-chess`'s `chess.engine`. Never server-side (respects the REQS out-of-scope line).
 - **Tooling:** `uv` + `pyproject.toml` is the hero path; a container is an **optional**, non-default path (ADR-0024).
 - **Onboarding** (ADR-0022): GitHub → create bot (key shown once) → clone quickstart → run → matched vs a house bot. **House bots** are always in pools (the SDK's reference bots double as house bots).

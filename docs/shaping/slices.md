@@ -23,7 +23,7 @@ Shape A's parts A1…A7 map one-to-one to vertical slices V1…V7, each ending i
 | **V4** ✅ | A4 | A bot killed mid-game reconnects and resumes the same seat; blind move-resend is safe; both-gone game aborts | N1/N5 resilience |
 | **V5** ✅ | A5 | Bots resign and agree draws; server auto-draws stalemate/insufficient/repetition; ratings move on FINISHED | N5/N8 outcomes |
 | **V6** ✅ | A6 | Anonymous visitor opens the dashboard, sees the live lobby, clicks a game, watches from the correct current state, replays from move 1 | N9/U1 spectator UX |
-| **V7** ✅ | A7 | A newcomer `pip`-installs `chessroom`, runs the `uv` quickstart `RandomBot`, and is playing in minutes; UCI bridge points an engine at the platform | client → packaged SDK |
+| **V7** ✅ | A7 | A newcomer `pip`-installs `engineroom`, runs the `uv` quickstart `RandomBot`, and is playing in minutes; UCI bridge points an engine at the platform | client → packaged SDK |
 
 **End-to-end smoke test** (PRD Testing Decisions) is now **realized** (V7): a Playwright e2e mints a key, runs the quickstart `RandomBot` through the SDK, and asserts it appears on the dashboard and is watchable — the real signup → SDK run → watch-on-dashboard flow.
 
@@ -170,13 +170,13 @@ smoke** e2e (dashboard → watch → replay) adopts Phase D (`make e2e` / CI `e2
 [V7-plan.md](V7-plan.md)); all six open decisions confirmed up front (Q1–Q6 all as ★). This is the
 final MVP slice — the wire client stops being a test harness and becomes a **packaged SDK**.
 
-`sdk/chessroom` is a decoupled `uv` package (own `pyproject.toml`, **zero `engine_room` imports** —
+`sdk/engineroom` is a decoupled `uv` package (own `pyproject.toml`, **zero `engine_room` imports** —
 the contract is [PROTOCOL.md](../design/PROTOCOL.md), not shared code; ADR-0021, AST-boundary-tested).
 You subclass `Bot`, implement `choose_move(board)`, and call `run()`; the run loop — extracted from
 the proven `devtools/demo_bot` — hides the handshake, auto-seek, the `your_turn`→`move`→`move_ack`
 loop, heartbeat pong (§10), `ply`-idempotent resends (§9), and reconnect-resume (§8). `choose_move`
 may return `RESIGN`/`ACCEPT_DRAW` (§7). Reference bots `RandomBot`/`MinimaxBot` **mirror** the house
-bots' logic (not shared-imported — O-1); a **UCI bridge** (`UCIBot` + a `chessroom-uci` console
+bots' logic (not shared-imported — O-1); a **UCI bridge** (`UCIBot` + a `engineroom-uci` console
 script) points a local engine like Stockfish at the platform, client-side. The `sdk/quickstart`
 template (`random_bot.py` + `.env.example` + README + optional Dockerfile) is the newcomer path:
 `git clone → uv sync → paste CHESSROOM_KEY → uv run python random_bot.py → playing`, wired as

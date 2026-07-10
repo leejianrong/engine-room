@@ -2,7 +2,7 @@
 shaping: true
 ---
 
-# V7 Plan — Hero onboarding: packaged `chessroom` SDK + `uv` quickstart + UCI bridge
+# V7 Plan — Hero onboarding: packaged `engineroom` SDK + `uv` quickstart + UCI bridge
 
 **Status: ✅ COMPLETE (2026-07-09).** All six to-confirm decisions confirmed by the owner as the ★
 recommendation (Q1–Q6 below). Built on `feat/v7-sdk` off merged V6 (`4600a7a`, PR #13 — V6 was
@@ -20,7 +20,7 @@ separate `sdk.spec.ts` so the V6 smoke is untouched. (c) the planned `Bot(name=)
 **removed** — live verification showed the lobby name is the server-side identity (the key), and
 `hello` carries no name, so it was dead API. (d) the SDK got its own CI `sdk` job + a pre-push hook
 line + a `make test` line (the plan only listed tests) since it's a separate `uv` project. (e) the
-contract test imports the SDK from `sdk/chessroom/src` via `sys.path` (its deps are already in the
+contract test imports the SDK from `sdk/engineroom/src` via `sys.path` (its deps are already in the
 server env) rather than adding a server dependency — keeps the server's declared deps clean and the
 decoupling crisp. Everything else matches the plan. Ground truth is the
 ADRs + [PROTOCOL.md](../design/PROTOCOL.md); where this plan and the docs disagree, **the code wins
@@ -38,14 +38,14 @@ ADR-0023 hero flow ("zero → live watchable game in minutes, no protocol plumbi
 > game — **live on the V6 dashboard**. A UCI user points Stockfish at the platform with one command.
 
 Concretely:
-- **`chessroom` SDK** — a `pip`/`uv`-installable package. The user **subclasses `Bot` and implements
+- **`engineroom` SDK** — a `pip`/`uv`-installable package. The user **subclasses `Bot` and implements
   `choose_move(board) -> move`** (board is a `python-chess` `Board`); the SDK owns the WebSocket
   transport, the authenticated handshake, auto-seek/queue, reconnect-resume, `ply`-idempotent
   resends, heartbeat pong, and all protocol (de)serialization (ADR-0021). Config via `CHESSROOM_KEY`
   (+ `CHESSROOM_URL`) env (ADR-0022).
 - **Reference bots** — `RandomBot` (hello-world) and `MinimaxBot` (level-2) ship in the SDK; their
   move logic mirrors the server's house bots (ADR-0022 "reference bots double as house bots").
-- **UCI bridge** — a `UCIBot` (+ a `chessroom-uci` console entry point) whose `choose_move` delegates
+- **UCI bridge** — a `UCIBot` (+ a `engineroom-uci` console entry point) whose `choose_move` delegates
   to a local UCI engine (e.g. Stockfish) via `chess.engine`, entirely client-side (ADR-0021 L2).
 - **`uv` quickstart template** — a minimal, ready-to-run `RandomBot` project (`pyproject.toml` +
   `uv.lock` + `random_bot.py` + `.env.example` + README + optional `Dockerfile`) that depends on the
@@ -61,7 +61,7 @@ optional dev ergonomics (a `make` target + a contract test).
 
 ## What thickens (A7 → V7)
 Per [shaping.md A2–A7 table](shaping.md#a2a7--thickening-breadboarded-per-slice-in-the-slices-doc):
-> Bot client stub → packaged `chessroom` SDK repo + `uv` quickstart + client-side UCI bridge;
+> Bot client stub → packaged `engineroom` SDK repo + `uv` quickstart + client-side UCI bridge;
 > reference bots become the N4 house bots.
 
 No new *server subsystems*. V7 thickens the **client** end of the wire contract:
@@ -113,21 +113,21 @@ No new *server subsystems*. V7 thickens the **client** end of the wire contract:
 
 | # | Question | Options & recommendation |
 |---|----------|--------------------------|
-| **Q1 — Repo layout (THE big fork)** | ADR-0021/0022 say *separate repos* for the SDK and the quickstart. Do we create new repo(s), or land the SDK as a package **in this monorepo**? | **★ (A) Monorepo package now, extract-on-publish later.** SDK at `sdk/chessroom/` (own `pyproject.toml`, **zero `engine_room` imports**, enforced by a boundary test), quickstart at `sdk/quickstart/`. The quickstart installs the SDK by **path/git** dependency during V7. This lets V7 land as a *real, CI-gated, demoable slice now* — `make`, testcontainers, and the Playwright smoke all already live here and reach it. Honors the decoupling that matters (no shared server code) while deferring the *literal* separate-repo + PyPI end-state to a tracked follow-up (git-subtree split + PyPI publish — needs an owner PyPI account/token, an owner action). **Updates ADR-0021/0024 to record "monorepo-package-first, extract-on-publish."** ⟶ (B) Two new repos (`chessroom` + `chessroom-quickstart`) now — matches the ADRs literally, but cross-repo CI + publishing + install-from-git before V7 can prove itself; the end-to-end smoke can't be one CI job in this repo. ⟶ (C) One new repo (SDK, quickstart as `examples/` subdir). Middle ground; still cross-repo. **Trade-off axis:** *install* — path/git (A, no publish) vs. PyPI `pip install chessroom` (the literal ADR-0022 promise, needs a publish step + account). I recommend building on path/git and treating PyPI publish as an explicit, separate follow-up so "pip-installable" is *proven buildable* without blocking the slice on registry credentials. |
+| **Q1 — Repo layout (THE big fork)** | ADR-0021/0022 say *separate repos* for the SDK and the quickstart. Do we create new repo(s), or land the SDK as a package **in this monorepo**? | **★ (A) Monorepo package now, extract-on-publish later.** SDK at `sdk/engineroom/` (own `pyproject.toml`, **zero `engine_room` imports**, enforced by a boundary test), quickstart at `sdk/quickstart/`. The quickstart installs the SDK by **path/git** dependency during V7. This lets V7 land as a *real, CI-gated, demoable slice now* — `make`, testcontainers, and the Playwright smoke all already live here and reach it. Honors the decoupling that matters (no shared server code) while deferring the *literal* separate-repo + PyPI end-state to a tracked follow-up (git-subtree split + PyPI publish — needs an owner PyPI account/token, an owner action). **Updates ADR-0021/0024 to record "monorepo-package-first, extract-on-publish."** ⟶ (B) Two new repos (`engineroom` + `engineroom-quickstart`) now — matches the ADRs literally, but cross-repo CI + publishing + install-from-git before V7 can prove itself; the end-to-end smoke can't be one CI job in this repo. ⟶ (C) One new repo (SDK, quickstart as `examples/` subdir). Middle ground; still cross-repo. **Trade-off axis:** *install* — path/git (A, no publish) vs. PyPI `pip install engineroom` (the literal ADR-0022 promise, needs a publish step + account). I recommend building on path/git and treating PyPI publish as an explicit, separate follow-up so "pip-installable" is *proven buildable* without blocking the slice on registry credentials. |
 | **Q2 — SDK surface breadth** | Beyond `choose_move`, what does v1 expose? | **★ Minimal + optional lifecycle hooks.** Required: `choose_move`. Optional overridable no-op hooks: `on_game_start(info)`, `on_game_over(result)`. The SDK auto-declines draws (a move implicitly declines, §7) and never offers/claims. Everything else (reconnect/heartbeat/idempotency) stays hidden (P-f). ⟶ Alt: also expose `on_your_turn(state)` for full control (power users) — defer to v1.x. |
-| **Q3 — Resign / draw in the SDK** | The protocol has resign + draw offer/accept (§7). Expose in v1? | **★ Yes, minimally:** `choose_move` may return the sentinel `chessroom.RESIGN`, and `state.opponent_draw_offer` is surfaced so a bot can return `chessroom.ACCEPT_DRAW`; offering a draw is a `Bot(offer_draw=…)`/return-tuple extension deferred to v1.x. Keeps the hero RandomBot to "return a move" while making resign/accept reachable (the `demo_bot --resign-after` behavior). ⟶ Alt: omit entirely from v1 (RandomBot never resigns) — simplest, but loses a real protocol capability the demo already shows. |
-| **Q4 — UCI bridge packaging** | Ship in the SDK or as a separate entry point/package? | **★ In the SDK**, as `chessroom.uci.UCIBot` + a `chessroom-uci` console script (`[project.scripts]`). Delegates to `chess.engine.SimpleEngine.popen_uci(<engine path>)`; config = engine path + think time/depth. Stockfish is **not bundled** (user supplies a binary). Secondary polish (ADR-0023). ⟶ Alt: separate `chessroom-uci` package — more release surface for a near-free feature `python-chess` already enables. |
-| **Q5 — Quickstart contents & the "reference bots = house bots" reconciliation** | What's in the template, and how literally do the SDK reference bots "double as" the server house bots? | **★ Quickstart = a learning-shaped `RandomBot` file** (subclass `Bot`, ~10 lines) even though the SDK ships `RandomBot` — the point is to *show the pattern*. Plus `pyproject.toml`/`uv.lock`, `.env.example` (`CHESSROOM_KEY=`), README (the <20-min path), optional `Dockerfile` (ADR-0024). **Reference-bots reconciliation:** the SDK's `RandomBot`/`MinimaxBot` **mirror** the server house bots' logic (both trivially wrap `python-chess` / the existing `game/minimax.py`) but are **not shared-imported** — the server keeps its in-process `game/house_bots.py` (sessionless, no socket) and must not import the SDK (ADR-0021 decoupling). Documented as O-1, not a code merge. ⟶ Alt: make `game/house_bots.py` import `chessroom` — **rejected**, violates the decoupling ADR. |
-| **Q6 — Testing depth & the end-to-end smoke** | How do we test the packaged SDK, and do we finally wire the ADR-0023 signup→SDK→watch smoke? | **★ Three layers:** (1) **SDK unit** (`sdk/chessroom/tests/`, no infra) — protocol codec + run-loop logic over a *fake in-memory transport* (scripted server frames), incl. reconnect/resend/pong; fast, in the gate. (2) **Contract/integration** (`server/tests/integration/`, live-uvicorn + testcontainers) — the **packaged** SDK's `RandomBot` plays a real game vs the greeter to `game_over`; a simulated mid-game drop resumes and finishes; an import-boundary test asserts `chessroom` imports no `engine_room`. (3) **End-to-end** — extend V6's Playwright smoke (or a thin integration variant): start an SDK `RandomBot`, assert its game appears in `GET /api/games` / the lobby and is watchable (the ADR-0023 realization). ⟶ Alt: skip layer (3) — but V6 exists precisely to make this meaningful, so I recommend wiring at least the API-level end-to-end assertion. |
+| **Q3 — Resign / draw in the SDK** | The protocol has resign + draw offer/accept (§7). Expose in v1? | **★ Yes, minimally:** `choose_move` may return the sentinel `engineroom.RESIGN`, and `state.opponent_draw_offer` is surfaced so a bot can return `engineroom.ACCEPT_DRAW`; offering a draw is a `Bot(offer_draw=…)`/return-tuple extension deferred to v1.x. Keeps the hero RandomBot to "return a move" while making resign/accept reachable (the `demo_bot --resign-after` behavior). ⟶ Alt: omit entirely from v1 (RandomBot never resigns) — simplest, but loses a real protocol capability the demo already shows. |
+| **Q4 — UCI bridge packaging** | Ship in the SDK or as a separate entry point/package? | **★ In the SDK**, as `engineroom.uci.UCIBot` + a `engineroom-uci` console script (`[project.scripts]`). Delegates to `chess.engine.SimpleEngine.popen_uci(<engine path>)`; config = engine path + think time/depth. Stockfish is **not bundled** (user supplies a binary). Secondary polish (ADR-0023). ⟶ Alt: separate `engineroom-uci` package — more release surface for a near-free feature `python-chess` already enables. |
+| **Q5 — Quickstart contents & the "reference bots = house bots" reconciliation** | What's in the template, and how literally do the SDK reference bots "double as" the server house bots? | **★ Quickstart = a learning-shaped `RandomBot` file** (subclass `Bot`, ~10 lines) even though the SDK ships `RandomBot` — the point is to *show the pattern*. Plus `pyproject.toml`/`uv.lock`, `.env.example` (`CHESSROOM_KEY=`), README (the <20-min path), optional `Dockerfile` (ADR-0024). **Reference-bots reconciliation:** the SDK's `RandomBot`/`MinimaxBot` **mirror** the server house bots' logic (both trivially wrap `python-chess` / the existing `game/minimax.py`) but are **not shared-imported** — the server keeps its in-process `game/house_bots.py` (sessionless, no socket) and must not import the SDK (ADR-0021 decoupling). Documented as O-1, not a code merge. ⟶ Alt: make `game/house_bots.py` import `engineroom` — **rejected**, violates the decoupling ADR. |
+| **Q6 — Testing depth & the end-to-end smoke** | How do we test the packaged SDK, and do we finally wire the ADR-0023 signup→SDK→watch smoke? | **★ Three layers:** (1) **SDK unit** (`sdk/engineroom/tests/`, no infra) — protocol codec + run-loop logic over a *fake in-memory transport* (scripted server frames), incl. reconnect/resend/pong; fast, in the gate. (2) **Contract/integration** (`server/tests/integration/`, live-uvicorn + testcontainers) — the **packaged** SDK's `RandomBot` plays a real game vs the greeter to `game_over`; a simulated mid-game drop resumes and finishes; an import-boundary test asserts `engineroom` imports no `engine_room`. (3) **End-to-end** — extend V6's Playwright smoke (or a thin integration variant): start an SDK `RandomBot`, assert its game appears in `GET /api/games` / the lobby and is watchable (the ADR-0023 realization). ⟶ Alt: skip layer (3) — but V6 exists precisely to make this meaningful, so I recommend wiring at least the API-level end-to-end assertion. |
 
 ### Decisions confirmed (2026-07-09)
 The owner confirmed **all six** to-confirm questions as the recommended (★) option:
 
 | # | Question | Confirmed |
 |---|----------|-----------|
-| **Q1 Repo layout** | Separate repo(s) vs. monorepo package? | ★ **Monorepo package now, extract-on-publish later.** SDK at `sdk/chessroom/` (own `pyproject.toml`, zero `engine_room` imports, boundary-tested); quickstart at `sdk/quickstart/` installing the SDK by path/git. Literal standalone-repo + PyPI publish → tracked follow-up (O-2, needs an owner PyPI account). ADR-0021/0024 updated to record the drift. |
+| **Q1 Repo layout** | Separate repo(s) vs. monorepo package? | ★ **Monorepo package now, extract-on-publish later.** SDK at `sdk/engineroom/` (own `pyproject.toml`, zero `engine_room` imports, boundary-tested); quickstart at `sdk/quickstart/` installing the SDK by path/git. Literal standalone-repo + PyPI publish → tracked follow-up (O-2, needs an owner PyPI account). ADR-0021/0024 updated to record the drift. |
 | **Q2/Q3 SDK surface** | How much beyond `choose_move`? | ★ **Minimal + resign/accept.** Required `choose_move`; optional no-op `on_game_start`/`on_game_over`; `choose_move` may return `RESIGN`/`ACCEPT_DRAW`; auto-declines offers. Offering draws + `on_your_turn` → v1.x. |
-| **Q4 UCI bridge** | In the SDK or separate? | ★ **In the SDK** — `chessroom.uci.UCIBot` + a `chessroom-uci` console script; Stockfish user-supplied; secondary polish. |
+| **Q4 UCI bridge** | In the SDK or separate? | ★ **In the SDK** — `engineroom.uci.UCIBot` + a `engineroom-uci` console script; Stockfish user-supplied; secondary polish. |
 | **Q5 Quickstart & reference bots** | Contents + how literal is "reference bots = house bots"? | ★ **Learning-shaped `RandomBot` quickstart file** (+ pyproject/uv/.env.example/README/optional Dockerfile); SDK `RandomBot`/`MinimaxBot` **mirror** the house-bot logic but are **not shared-imported** (decoupling — O-1). |
 | **Q6 Testing depth** | How deep + wire the ADR-0023 smoke now? | ★ **Three layers incl. e2e** — SDK unit (fake transport, in gate) + contract/integration (packaged SDK vs greeter to `game_over` on live-uvicorn+testcontainers, import-boundary) + end-to-end (SDK bot's game appears in the lobby / watchable, extending V6's Playwright smoke). |
 
@@ -135,13 +135,13 @@ The owner confirmed **all six** to-confirm questions as the recommended (★) op
 
 ### SDK shape (P-a/P-b/P-c/P-f) — the design
 ```python
-# chessroom/__init__.py  (public surface)
-from chessroom.bot import Bot
-from chessroom.bots import RandomBot, MinimaxBot
-from chessroom.uci import UCIBot
-from chessroom.const import RESIGN, ACCEPT_DRAW
+# engineroom/__init__.py  (public surface)
+from engineroom.bot import Bot
+from engineroom.bots import RandomBot, MinimaxBot
+from engineroom.uci import UCIBot
+from engineroom.const import RESIGN, ACCEPT_DRAW
 
-# chessroom/bot.py
+# engineroom/bot.py
 class Bot:
     def __init__(self, key=None, url=None, name=None, time_control=(180, 0)): ...
     def choose_move(self, board: chess.Board) -> chess.Move | str: raise NotImplementedError
@@ -156,7 +156,7 @@ class Bot:
 ```
 ```
 # quickstart/random_bot.py  (what the newcomer runs)
-from chessroom import Bot
+from engineroom import Bot
 import chess, random
 class RandomBot(Bot):
     def choose_move(self, board):
@@ -169,7 +169,7 @@ if __name__ == "__main__":
 ```
 1. GitHub sign-in → create a bot → copy the crbk_ key (V2 REST; browser or `make mint` locally)
 2. git clone <quickstart>  &&  cd quickstart
-3. uv sync                                   # installs chessroom (ADR-0024)
+3. uv sync                                   # installs engineroom (ADR-0024)
 4. cp .env.example .env; paste CHESSROOM_KEY  (+ CHESSROOM_URL for local dev)
 5. uv run python random_bot.py               # SDK connects, auto-seeks, plays
 6. open the dashboard → the game is live in the lobby → watch it (V6)
@@ -177,33 +177,33 @@ if __name__ == "__main__":
 
 ### UCI bridge (Q4) — the design
 ```python
-# chessroom/uci.py
+# engineroom/uci.py
 class UCIBot(Bot):
     def __init__(self, engine_path, *, think_time=0.1, **kw):
         super().__init__(**kw); self._engine = chess.engine.SimpleEngine.popen_uci(engine_path)
     def choose_move(self, board):
         return self._engine.play(board, chess.engine.Limit(time=self._think_time)).move
-# console: `chessroom-uci --engine /path/to/stockfish [--think-time 0.1]`  (reads CHESSROOM_KEY)
+# console: `engineroom-uci --engine /path/to/stockfish [--think-time 0.1]`  (reads CHESSROOM_KEY)
 ```
 
 ## Project layout (changes this slice — assuming Q1 ★ = monorepo package)
 ```
 sdk/
-  chessroom/
+  engineroom/
     pyproject.toml         # NEW — uv/hatchling; deps: websockets, chess; no engine_room dep (P-e)
     uv.lock                # NEW
     README.md              # NEW — SDK usage
-    src/chessroom/
+    src/engineroom/
       __init__.py          # NEW — public surface (Bot, RandomBot, MinimaxBot, UCIBot, RESIGN, …)
       bot.py               # NEW — Bot base class + run loop (extracted from demo_bot, P-a/P-f)
       connection.py        # NEW — WS connect/hello/reconnect; frame read w/ pong (from demo_bot._next)
       protocol.py          # NEW — message shapes/codec re-derived from PROTOCOL.md (no server import)
       bots.py              # NEW — RandomBot, MinimaxBot reference bots (mirror house logic, O-1)
-      uci.py               # NEW — UCIBot + chessroom-uci console entry (Q4)
+      uci.py               # NEW — UCIBot + engineroom-uci console entry (Q4)
       const.py             # NEW — RESIGN / ACCEPT_DRAW sentinels; DEFAULT_URL; protocol version
     tests/                 # NEW — SDK unit tests over a fake in-memory transport (Q6 layer 1)
   quickstart/
-    pyproject.toml         # NEW — depends on chessroom (path/git, Q1); uv
+    pyproject.toml         # NEW — depends on engineroom (path/git, Q1); uv
     uv.lock                # NEW
     random_bot.py          # NEW — the hello-world subclass (Q5)
     .env.example           # NEW — CHESSROOM_KEY= / CHESSROOM_URL=
@@ -221,20 +221,20 @@ docs/                      # updated: ADR-0021/0022/0024 (drift), PROTOCOL note,
 ## Affordance → module map
 | Affordance | Module | Notes |
 |-----------|--------|-------|
-| `Bot` base + `choose_move` (ADR-0021 L1) | `sdk/chessroom/src/chessroom/bot.py` | sole user hook; sync `run()` wrapper (P-b/P-c). |
-| WS transport + handshake + reconnect (§4/§8) | `chessroom/connection.py` | from `demo_bot._connect`/`_reconnect_resume`/`_next` (P-a/P-f). |
-| `ply`-idempotent resends + heartbeat pong (§9/§10) | `chessroom/bot.py` run loop | resend same move on missing ack / after reconnect; pong pings (P-f). |
-| Protocol codec (PROTOCOL.md) | `chessroom/protocol.py` | re-derived from the spec; **no `engine_room` import** (P-e, boundary test). |
-| Reference bots (ADR-0022) | `chessroom/bots.py` | `RandomBot`/`MinimaxBot` mirror house logic (O-1). |
-| UCI bridge (ADR-0021 L2) | `chessroom/uci.py` + `[project.scripts]` | `UCIBot` + `chessroom-uci` (Q4). |
-| Config (CHESSROOM_KEY/URL, ADR-0022) | `chessroom/const.py` + `Bot.__init__` | env-first, kwarg override (P-d). |
+| `Bot` base + `choose_move` (ADR-0021 L1) | `sdk/engineroom/src/engineroom/bot.py` | sole user hook; sync `run()` wrapper (P-b/P-c). |
+| WS transport + handshake + reconnect (§4/§8) | `engineroom/connection.py` | from `demo_bot._connect`/`_reconnect_resume`/`_next` (P-a/P-f). |
+| `ply`-idempotent resends + heartbeat pong (§9/§10) | `engineroom/bot.py` run loop | resend same move on missing ack / after reconnect; pong pings (P-f). |
+| Protocol codec (PROTOCOL.md) | `engineroom/protocol.py` | re-derived from the spec; **no `engine_room` import** (P-e, boundary test). |
+| Reference bots (ADR-0022) | `engineroom/bots.py` | `RandomBot`/`MinimaxBot` mirror house logic (O-1). |
+| UCI bridge (ADR-0021 L2) | `engineroom/uci.py` + `[project.scripts]` | `UCIBot` + `engineroom-uci` (Q4). |
+| Config (CHESSROOM_KEY/URL, ADR-0022) | `engineroom/const.py` + `Bot.__init__` | env-first, kwarg override (P-d). |
 | Quickstart template (ADR-0022/0024) | `sdk/quickstart/` | clone → uv sync → run (Q5). |
-| SDK unit tests | `sdk/chessroom/tests/` | fake in-memory transport (Q6 layer 1). |
+| SDK unit tests | `sdk/engineroom/tests/` | fake in-memory transport (Q6 layer 1). |
 | SDK contract / end-to-end | `server/tests/integration/test_v7_sdk_live.py` | live-uvicorn + testcontainers; lobby appearance (Q6 layers 2–3). |
 | Dev ergonomics | `Makefile` (`make sdk-bot`) | run the quickstart bot vs `make dev`. |
 
 ## Build sub-steps (order within V7) — each ends demoable/testable
-1. **SDK skeleton + wire loop (happy path).** `sdk/chessroom/` package (pyproject/uv, `Bot`,
+1. **SDK skeleton + wire loop (happy path).** `sdk/engineroom/` package (pyproject/uv, `Bot`,
    `connection`, `protocol`, `const`, `RandomBot`); `choose_move` hook; `run()`; connect→hello→seek→
    play→`game_over`. **Checkpoint:** SDK unit — `RandomBot` plays a full game to `game_over` over a
    fake scripted transport; ruff/lint clean; import-boundary test (no `engine_room`).
@@ -249,7 +249,7 @@ docs/                      # updated: ADR-0021/0022/0024 (drift), PROTOCOL note,
    `opponent_draw_offer`; optional `on_game_start`/`on_game_over`. **Checkpoint:** SDK unit — a bot
    returning `RESIGN` yields a `resign` frame → `game_over{resignation}`; a move implicitly declines a
    standing offer.
-5. **UCI bridge (Q4).** `chessroom.uci.UCIBot` + `chessroom-uci` console script. **Checkpoint:** SDK
+5. **UCI bridge (Q4).** `engineroom.uci.UCIBot` + `engineroom-uci` console script. **Checkpoint:** SDK
    unit with a mock engine (no binary needed); an integration run gated on a real engine
    (`skipif` no `stockfish` on PATH).
 6. **Quickstart template + `make sdk-bot`.** `sdk/quickstart/` (pyproject/uv, `random_bot.py`,
@@ -266,7 +266,7 @@ docs/                      # updated: ADR-0021/0022/0024 (drift), PROTOCOL note,
    "open items resolved/carried". Full fast gate + integration + e2e green; PR finalized.
 
 ## Tests (at the seams — mirrors V1–V6 layering)
-- **SDK unit (`sdk/chessroom/tests/`, no infra — fake in-memory transport):**
+- **SDK unit (`sdk/engineroom/tests/`, no infra — fake in-memory transport):**
   - Happy path: `RandomBot` plays scripted `your_turn`s to `game_over`; correct `move` frames (right
     `game_id`/`ply`/`uci`).
   - Resilience: pong on `ping`; resend same `move` on a missing `move_ack`; reconnect-resume from a
@@ -285,7 +285,7 @@ docs/                      # updated: ADR-0021/0022/0024 (drift), PROTOCOL note,
   real.
 - **Seam reuse:** the SDK contract test reuses the existing `live_server(...)` uvicorn thread +
   testcontainers Postgres + greeter path; the SDK unit layer needs no server (fake transport), keeping
-  the fast gate fast. The `sdk/chessroom` package gets its own ruff config mirroring the server's.
+  the fast gate fast. The `sdk/engineroom` package gets its own ruff config mirroring the server's.
 
 ## Out of scope (pinned to the slice that proves it)
 Non-Python SDKs (ADR-0021 defers) · a published-to-PyPI release + the literal standalone-repo split
@@ -307,7 +307,7 @@ dashboard, `sdk.spec.ts`); O-5 (UCI engine teardown) is handled in `UCIBot.run()
   documentation level, not by a code merge. Revisit only if we ever run house bots *as SDK WS
   clients* (they're in-process/sessionless today).
 - **O-2 (Q1 extract-on-publish):** if Q1 lands as the monorepo package (★), the *literal* separate-repo
-  + `pip install chessroom` from PyPI is a follow-up — a git-subtree/`filter-repo` split + a PyPI
+  + `pip install engineroom` from PyPI is a follow-up — a git-subtree/`filter-repo` split + a PyPI
   publish job (needs an owner PyPI account/token). Until then the quickstart installs by path/git.
 - **O-3 (default URL):** the SDK defaults `CHESSROOM_URL` to the deployed `wss://engine-room.fly.dev`;
   local dev must override to `ws://localhost:8001`. Confirm the deployed WS path/host at impl (health

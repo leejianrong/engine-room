@@ -47,7 +47,7 @@ Cut the thinnest possible **end-to-end thread** first — one bot connects over 
 | **A4** | **Resilience** — reconnect resume via `welcome.active_game`; `ply`-idempotency (dup re-ack, stale ignore, future→`INVALID_PLY`); heartbeat mutual-abandonment→ABORTED; illegal-move forfeit; rate limits + soft cooldowns | |
 | **A5** | **Full chess outcomes** — resign, draw offer/accept (piggyback + standalone), server auto-draws (stalemate/insufficient/threefold/fifty-move); full termination vocabulary + Elo update on FINISHED only | |
 | **A6** | **Spectator UX** — Svelte dashboard: active-games lobby (REST poll), live board via SSE with catch-up snapshot + replay from move 1, both bots' name+rating/clock/side-to-move | |
-| **A7** | **Hero onboarding + UCI bridge** — `chessroom` SDK repo (subclass `Bot`, `choose_move`), `uv`+`pyproject.toml` quickstart template, client-side UCI bridge; reference bots double as house bots | |
+| **A7** | **Hero onboarding + UCI bridge** — `engineroom` SDK repo (subclass `Bot`, `choose_move`), `uv`+`pyproject.toml` quickstart template, client-side UCI bridge; reference bots double as house bots | |
 
 ### B: Layer-by-layer (horizontal)
 
@@ -59,7 +59,7 @@ Build each subsystem to completion before the next: full auth + bot CRUD, then f
 | **B2** | **Matchmaking layer** — Elo pools, seek/TTL/cooldown/same-owner, tickets → PAIRED, with no game loop to feed | ⚠️ |
 | **B3** | **Game engine layer** — full WS protocol, clock, rules, reconnect, draws, finalization, all at once | ⚠️ |
 | **B4** | **Spectating layer** — SSE + dashboard + lobby, fed by the completed engine | |
-| **B5** | **SDK layer** — `chessroom` SDK + quickstart + UCI bridge against the finished server | |
+| **B5** | **SDK layer** — `engineroom` SDK + quickstart + UCI bridge against the finished server | |
 
 ### C: Onboarding-funnel-first (vertical, user-journey order)
 
@@ -212,4 +212,4 @@ Each later part replaces or extends specific A1 affordances rather than adding n
 | A4 | Resilience | N1/N5 gain reconnect-resume (`welcome.active_game`), `ply`-idempotency, heartbeat mutual-abandon→ABORTED, illegal-move forfeit, rate limits |
 | A5 | Full outcomes | N5/N8 gain resign, draw offer/accept, server auto-draws, full termination vocab, real Elo update (N8 rating no longer stubbed) |
 | A6 | Spectator UX | N9 gains catch-up snapshot + replay; U1/U2 SvelteKit view (stood up in V1, D-b) **extended** with a real board + REST-poll lobby |
-| A7 | Hero onboarding | Bot client stub → packaged `chessroom` SDK repo + `uv` quickstart + client-side UCI bridge; reference bots become the N4 house bots |
+| A7 | Hero onboarding | Bot client stub → packaged `engineroom` SDK repo + `uv` quickstart + client-side UCI bridge; reference bots become the N4 house bots |

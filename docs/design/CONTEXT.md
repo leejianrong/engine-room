@@ -18,7 +18,7 @@ _(filled in as we agree on terms during grilling)_
 | Pool | A matchmaking queue scoped to one time control; Elo pairing happens within a pool. | 🟢 |
 | Spectator | Anonymous (no login) human viewer of a live game over a read-only SSE stream. | 🟢 |
 | Catch-up snapshot | The current game state (FEN, clocks, move list, players/ratings) sent to a spectator on join, before live SSE events. | 🟢 |
-| SDK | Official `chessroom` Python package (own repo, **uv + pyproject.toml**); user subclasses `Bot`, implements `choose_move`; SDK owns transport/auth/reconnect/protocol. | 🟢 |
+| SDK | Official `engineroom` Python package (own repo, **uv + pyproject.toml**); user subclasses `Bot`, implements `choose_move`; SDK owns transport/auth/reconnect/protocol. | 🟢 |
 | UCI bridge | Client-side SDK tool: a Bot that delegates move choice to a local UCI engine subprocess via `python-chess`. Never runs server-side. | 🟢 |
 | House bot | Platform-owned reference bot always present in pools; guarantees newcomers a match and keeps the spectator lobby lively. | 🟢 |
 | Protocol spec | The public, versioned wire-protocol contract the SDK and server both conform to (shared contract, not shared code). | 🟢 |

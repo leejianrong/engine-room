@@ -1,7 +1,7 @@
 """Fake bot protocol client — the primary WS test seam (PRD Testing Decisions).
 
 Speaks the raw JSON wire protocol over Starlette's in-process TestClient
-WebSocket. This is deliberately NOT the real `chessroom` SDK (separate repo,
+WebSocket. This is deliberately NOT the real `engineroom` SDK (separate repo,
 ADR-0021): tests assert on the wire contract, and a scripted client can drive
 timing-sensitive edge cases deterministically.
 """
