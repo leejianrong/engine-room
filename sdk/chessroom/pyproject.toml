@@ -5,6 +5,22 @@ description = "Official Python SDK for Engine Room — write a chess bot, connec
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Engine Room" }]
+keywords = ["chess", "bot", "ai", "websocket", "engine", "uci", "matchmaking", "engine-room"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment :: Board Games",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "websockets>=13",
     "chess>=1.11",
@@ -20,7 +36,11 @@ chessroom-uci = "chessroom.uci:main"
 
 [project.urls]
 Homepage = "https://engine-room.fly.dev"
+Repository = "https://github.com/leejianrong/engine-room"
+Documentation = "https://github.com/leejianrong/engine-room/blob/main/sdk/chessroom/README.md"
 Protocol = "https://github.com/leejianrong/engine-room/blob/main/docs/design/PROTOCOL.md"
+Changelog = "https://github.com/leejianrong/engine-room/releases"
+Issues = "https://github.com/leejianrong/engine-room/issues"
 
 [dependency-groups]
 dev = [
