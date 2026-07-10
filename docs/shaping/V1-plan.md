@@ -63,7 +63,7 @@ engine-room/
     src/routes/+page.svelte  # U1/U2 bare live view (EventSource → move list)
   docker-compose.yml         # local Postgres
 ```
-(The `chessroom` SDK is a **separate repo** per ADR-0021 — not created here; V1's client is `tests/fake_client.py`.)
+(The `engineroom` SDK is a **separate repo** per ADR-0021 — not created here; V1's client is `tests/fake_client.py`.)
 
 ## Affordance → module map
 | Affordance | Module | Notes |

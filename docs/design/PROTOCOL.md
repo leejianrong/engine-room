@@ -1,6 +1,6 @@
 # Bot ↔ Server Wire Protocol — v1.0 (draft)
 
-The contract between a bot client (e.g. the `chessroom` Python SDK) and the server.
+The contract between a bot client (e.g. the `engineroom` Python SDK) and the server.
 This is a **public, versioned contract**: the SDK and server both conform to it, sharing
 the spec, not code (ADR-0021). Human/management APIs (auth, bot CRUD, spectating) are **not**
 covered here — they are REST/SSE; this document covers only the **bot WebSocket**.
@@ -40,7 +40,7 @@ open WS (Authorization: Bearer <key>)
 
 ### `hello` (client → server)
 ```json
-{ "type": "hello", "protocol_version": "1.0", "sdk": "chessroom-py/0.1.0" }
+{ "type": "hello", "protocol_version": "1.0", "sdk": "engineroom-py/0.1.0" }
 ```
 
 ### `welcome` (server → client)
@@ -246,4 +246,4 @@ S→ game_over {result:"white_wins", termination:"checkmate", pgn:"...", rating:
 - Exact numeric defaults (ping interval, liveness timeout, start-grace, seek TTL) are tunable — see QUESTIONS E8/C8-adjacent.
 - v1.x may add: SAN as an accepted **input** (still UCI-canonical, ADR-0007), per-time-control ratings, spectator-side protocol doc, and increment time controls (the `{base,increment}` model already supports it; increment path is dormant at MVP, ADR-0025 #6).
 - The authoritative machine-readable schema (JSON Schema) is a future artifact derived from this doc (ADR-0021 follow-up).
-- **Reference implementation (V7):** the `chessroom` Python SDK (`sdk/chessroom`) is the reference client conforming to this contract — it implements the handshake, seek, the in-game loop, `ply`-idempotency (§9), heartbeat pong (§10), and reconnect-resume (§8) from this spec only (no server code; ADR-0021). It's a good cross-check when reading the wire behavior.
+- **Reference implementation (V7):** the `engineroom` Python SDK (`sdk/engineroom`) is the reference client conforming to this contract — it implements the handshake, seek, the in-game loop, `ply`-idempotency (§9), heartbeat pong (§10), and reconnect-resume (§8) from this spec only (no server code; ADR-0021). It's a good cross-check when reading the wire behavior.

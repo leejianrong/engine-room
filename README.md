@@ -2,7 +2,7 @@
 
 A real-time matchmaking and spectating platform for **AI chess bots** — think "Chess.com for bots." Humans register bots; bots connect outward over a WebSocket to be matched by Elo and play **bot-vs-bot** games that anyone can watch live in the browser.
 
-> **Status:** MVP complete. All seven slices are built and merged — **V1** walking skeleton, **V2** GitHub identity + bot keys, **V3** Elo matchmaking, **V4** resilience (reconnect/idempotency/heartbeat), **V5** outcomes + real ratings, **V6** spectator UX (lobby/catch-up/replay/ambient bots), and **V7** the packaged `chessroom` SDK + `uv` quickstart + UCI bridge. Deployed on Fly.io at **https://engine-room.fly.dev**. See the [build plan](docs/shaping/slices.md) and per-slice plans in [docs/shaping/](docs/shaping/).
+> **Status:** MVP complete. All seven slices are built and merged — **V1** walking skeleton, **V2** GitHub identity + bot keys, **V3** Elo matchmaking, **V4** resilience (reconnect/idempotency/heartbeat), **V5** outcomes + real ratings, **V6** spectator UX (lobby/catch-up/replay/ambient bots), and **V7** the packaged `engineroom` SDK + `uv` quickstart + UCI bridge. Deployed on Fly.io at **https://engine-room.fly.dev**. See the [build plan](docs/shaping/slices.md) and per-slice plans in [docs/shaping/](docs/shaping/).
 
 ## What it does (MVP / demoable slice)
 
@@ -20,7 +20,7 @@ Full scope, non-goals, and the 76 user stories are in the [PRD](docs/design/PRD.
 engine-room/
   server/      FastAPI + Postgres backend (uv)          -> server/README.md
   frontend/    SvelteKit spectator UI (Vite, static SPA) -> frontend/README.md
-  sdk/         chessroom SDK + uv quickstart template     -> sdk/chessroom/README.md, sdk/quickstart/README.md
+  sdk/         engineroom SDK + uv quickstart template     -> sdk/engineroom/README.md, sdk/quickstart/README.md
   docs/        design, decisions, and the build plan     -> docs/README.md
   docker-compose.yml   local Postgres (host port 5433)
 ```
@@ -45,7 +45,7 @@ Start at the **[docs index](docs/README.md)**. The key documents:
 
 - **Backend:** Python, FastAPI, SQLAlchemy 2.0 (async) + Alembic, Postgres, `python-chess`; packaged with `uv`.
 - **Frontend:** TypeScript, SvelteKit + Vite (static SPA, SSE-driven).
-- **Bot SDK:** `chessroom` Python package at [`sdk/chessroom`](sdk/chessroom/) — a decoupled `uv` project that depends only on the versioned protocol spec, never on server code (ADR-0021, enforced by an import-boundary test). It currently lives in this monorepo; the standalone-repo split + PyPI publish are deferred (V7 O-2).
+- **Bot SDK:** `engineroom` Python package at [`sdk/engineroom`](sdk/engineroom/) — a decoupled `uv` project that depends only on the versioned protocol spec, never on server code (ADR-0021, enforced by an import-boundary test). It currently lives in this monorepo; the standalone-repo split + PyPI publish are deferred (V7 O-2).
 
 ## Try it out — watch a live match (one command)
 
@@ -60,7 +60,7 @@ wipes the Postgres volume for a clean slate).
 
 ## Write and run your own bot (the hero path)
 
-Bots are external clients that connect *to* the platform, using the **`chessroom` SDK**: you
+Bots are external clients that connect *to* the platform, using the **`engineroom` SDK**: you
 subclass `Bot`, implement `choose_move(board)` (a `python-chess` board), and call `run()` — the SDK
 handles the WebSocket, matchmaking, clocks, reconnects, and the wire protocol. The
 [`sdk/quickstart`](sdk/quickstart/) template is the newcomer path:
@@ -84,8 +84,8 @@ uv run python random_bot.py
 Point an existing UCI engine at the platform instead:
 
 ```bash
-cd sdk/chessroom
-CHESSROOM_KEY=crbk_... uv run chessroom-uci --engine /path/to/stockfish
+cd sdk/engineroom
+CHESSROOM_KEY=crbk_... uv run engineroom-uci --engine /path/to/stockfish
 ```
 
 There's also `make bot` — the older dev demo client (`engine_room.devtools.demo_bot`, minimax,
