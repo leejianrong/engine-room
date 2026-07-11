@@ -7,17 +7,25 @@ like the SSE endpoint.
   from `LiveState`; a finished game from its stored PGN (D-d). One uniform
   `[{ply, san, uci, fen}]` move-list either way, so the client has ONE replay
   model.
+- `GET /api/bots/{bot_id}/games` — a single bot's finished-game history + a
+  W/L/D summary, shaped from THAT bot's perspective (KAN-53). Read-only, public,
+  backs the future bot-profile pages (KAN-52).
 
-Both degrade gracefully when no `game_reader` is injected (fast, DB-free tests):
-the lobby returns active games only; the detail serves an in-memory game or 404s.
+Both `/api/games*` endpoints degrade gracefully when no `game_reader` is injected
+(fast, DB-free tests): the lobby returns active games only; the detail serves an
+in-memory game or 404s. The bot-history endpoint is purely durable (finished
+games live only in Postgres), so with no reader it reports the bot as unknown.
 """
 
 from __future__ import annotations
 
 import chess
 from fastapi import APIRouter, HTTPException, Request
+from sqlalchemy import and_, func, or_, select
 
 from ..game.game import Game
+from ..persistence.models import Bot as BotRow
+from ..persistence.models import Game as GameRow
 
 router = APIRouter()
 
@@ -110,3 +118,137 @@ async def get_game(game_id: str, request: Request) -> dict:
     if game is not None and game.live is not None:
         return _live_game_view(game)
     raise HTTPException(status_code=404, detail="no such game")
+
+
+# --- Per-bot game history (KAN-53) ---------------------------------------------
+# A bot-perspective view over its FINISHED games: result becomes win/loss/draw for
+# THIS bot (derived from the stored result + which color it played), the opponent
+# is whoever sat the other seat, and the rating change is this bot's own colour's
+# {before, after}. ABORTED rows have no result, so they're excluded (no W/L/D).
+
+# Result strings stored on a decided game (models.Game.result); "aborted" is the
+# only other value and is filtered out.
+_DECIDED = ("white_wins", "black_wins", "draw")
+
+
+def _bot_result(row: GameRow, is_white: bool) -> str:
+    """win/loss/draw from THIS bot's seat, for a decided (non-aborted) game."""
+    if row.result == "draw":
+        return "draw"
+    bot_won = row.result == ("white_wins" if is_white else "black_wins")
+    return "win" if bot_won else "loss"
+
+
+def _bot_game_entry(row: GameRow, bot_id: str) -> dict:
+    """One finished game as a history item shaped from `bot_id`'s perspective."""
+    is_white = row.white_bot_id == bot_id
+    if is_white:
+        color = "white"
+        my_before, my_after = row.white_rating_before, row.white_rating_after
+        opp_name, opp_id = row.black_name, row.black_bot_id
+        opp_after, opp_before = row.black_rating_after, row.black_rating_before
+    else:
+        color = "black"
+        my_before, my_after = row.black_rating_before, row.black_rating_after
+        opp_name, opp_id = row.white_name, row.white_bot_id
+        opp_after, opp_before = row.white_rating_after, row.white_rating_before
+    rating = (
+        {"before": my_before, "after": my_after}
+        if my_before is not None and my_after is not None
+        else None
+    )
+    return {
+        "game_id": row.id,
+        "color": color,
+        "result": _bot_result(row, is_white),
+        "opponent": {
+            "bot_id": opp_id,
+            "name": opp_name,
+            # The opponent's post-game rating (falls back to pre-game if a game
+            # somehow stored only the "before").
+            "rating": opp_after if opp_after is not None else opp_before,
+        },
+        "rating": rating,
+        "time_control": {
+            "base_seconds": row.base_seconds,
+            "increment_seconds": row.increment_seconds,
+        },
+        "termination": row.termination,
+        "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+    }
+
+
+async def _bot_history(session_factory, bot_id: str, limit: int) -> dict | None:
+    """`None` if the bot is unknown; otherwise its history + W/L/D summary.
+
+    The summary is aggregated over ALL the bot's decided games (independent of the
+    `limit` that only trims the returned per-game list)."""
+    async with session_factory() as session:
+        bot = await session.get(BotRow, bot_id)
+        if bot is None:
+            return None
+
+        plays = or_(GameRow.white_bot_id == bot_id, GameRow.black_bot_id == bot_id)
+        decided = GameRow.result.in_(_DECIDED)
+        win = or_(
+            and_(GameRow.white_bot_id == bot_id, GameRow.result == "white_wins"),
+            and_(GameRow.black_bot_id == bot_id, GameRow.result == "black_wins"),
+        )
+        loss = or_(
+            and_(GameRow.white_bot_id == bot_id, GameRow.result == "black_wins"),
+            and_(GameRow.black_bot_id == bot_id, GameRow.result == "white_wins"),
+        )
+        wins, losses, draws = (
+            await session.execute(
+                select(
+                    func.count().filter(win),
+                    func.count().filter(loss),
+                    func.count().filter(GameRow.result == "draw"),
+                ).where(plays, decided)
+            )
+        ).one()
+
+        rows = (
+            (
+                await session.execute(
+                    select(GameRow)
+                    .where(plays, decided)
+                    .order_by(GameRow.finished_at.desc())
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    return {
+        "bot": {"bot_id": bot.id, "name": bot.name},
+        "summary": {
+            "wins": int(wins),
+            "losses": int(losses),
+            "draws": int(draws),
+            "games_played": bot.games_played,
+            "rating": bot.rating,
+        },
+        "games": [_bot_game_entry(r, bot_id) for r in rows],
+    }
+
+
+@router.get("/api/bots/{bot_id}/games")
+async def bot_game_history(bot_id: str, request: Request, limit: int = 50) -> dict:
+    """A bot's finished-game history (newest first) + a W/L/D summary (KAN-53).
+
+    Public + read-only, like the lobby. Finished games are durable-only, so this
+    reads through the injected `game_reader`'s session; with no reader wired (fast
+    DB-free tests) there is no history to serve and the bot reads as unknown."""
+    reader = getattr(request.app.state, "game_reader", None)
+    session_factory = getattr(reader, "_session_factory", None)
+    limit = max(1, min(limit, 200))
+    history = (
+        await _bot_history(session_factory, bot_id, limit)
+        if session_factory is not None
+        else None
+    )
+    if history is None:
+        raise HTTPException(status_code=404, detail="no such bot")
+    return history
