@@ -6,7 +6,7 @@ wire protocol for you.
 
 Run it:
 
-    cp .env.example .env      # then paste your CHESSROOM_KEY into .env
+    cp .env.example .env      # then paste your ENGINEROOM_KEY into .env
     uv sync
     uv run python random_bot.py
 
@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 from engineroom import Bot
 
-load_dotenv()  # read CHESSROOM_KEY / CHESSROOM_URL from .env
+load_dotenv()  # read ENGINEROOM_KEY / ENGINEROOM_URL from .env
 
 
 class RandomBot(Bot):

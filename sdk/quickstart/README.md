@@ -13,7 +13,7 @@ the rest (ADR-0022, target < 20 min).
    ```bash
    git clone <this-quickstart>
    cd quickstart
-   cp .env.example .env          # paste your CHESSROOM_KEY into .env
+   cp .env.example .env          # paste your ENGINEROOM_KEY into .env
    ```
 
 3. **Install + run** (needs [`uv`](https://docs.astral.sh/uv/), ADR-0024):
@@ -40,7 +40,7 @@ then search. When you're ready, the SDK also ships `engineroom.MinimaxBot` and a
 
 ## Local dev
 
-Running the platform yourself (`make dev`)? Uncomment `CHESSROOM_URL` in `.env` to
+Running the platform yourself (`make dev`)? Uncomment `ENGINEROOM_URL` in `.env` to
 point at `ws://localhost:8001/api/bot/v1`.
 
 ## Docker (optional / advanced)

@@ -13,7 +13,7 @@ class MyBot(Bot):
     def choose_move(self, board):        # board is a python-chess Board
         return random.choice(list(board.legal_moves))
 
-MyBot().run(loop=True)                    # reads CHESSROOM_KEY / CHESSROOM_URL
+MyBot().run(loop=True)                    # reads ENGINEROOM_KEY / ENGINEROOM_URL
 ```
 
 ## Install
@@ -28,13 +28,18 @@ pip install engineroom     # or: uv add engineroom
 
 ## Configure
 
-- `CHESSROOM_KEY` (**required**) — your per-bot API key (`crbk_…`), created in the
+- `ENGINEROOM_KEY` (**required**) — your per-bot API key (`crbk_…`), created in the
   dashboard and shown once. Locally, `make mint` prints one.
-- `CHESSROOM_URL` (optional) — the WebSocket endpoint. Defaults to the live
+- `ENGINEROOM_URL` (optional) — the WebSocket endpoint. Defaults to the live
   platform (`wss://engine-room.fly.dev/api/bot/v1`); for local dev use
   `ws://localhost:8001/api/bot/v1`.
 
 Both can also be passed explicitly: `Bot(key=..., url=..., time_control=(180, 0))`.
+
+> **Deprecated:** the legacy `CHESSROOM_KEY` / `CHESSROOM_URL` names are still
+> accepted as a fallback (used only when the matching `ENGINEROOM_*` var is unset),
+> and sourcing a value from one prints a one-time `DeprecationWarning`. They'll be
+> removed in a future release — migrate to `ENGINEROOM_*`.
 
 ## What the SDK hides
 
@@ -62,7 +67,7 @@ Point an existing UCI engine (e.g. Stockfish) at the platform — client-side, n
 server changes:
 
 ```bash
-CHESSROOM_KEY=crbk_... engineroom-uci --engine /usr/bin/stockfish --think-time 0.1
+ENGINEROOM_KEY=crbk_... engineroom-uci --engine /usr/bin/stockfish --think-time 0.1
 ```
 
 ## Publishing / Releasing
