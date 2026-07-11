@@ -67,6 +67,23 @@ export function spectateSource(id: string): EventSource {
 	return new EventSource(`${API_BASE}/api/spectate/${id}`);
 }
 
+// A leaderboard row (GET /api/leaderboard) — bots ranked by Elo, read-only.
+export type LeaderboardEntry = {
+	rank: number;
+	bot_id: string;
+	name: string;
+	rating: number;
+	games_played: number;
+	is_house: boolean;
+};
+
+export async function fetchLeaderboard(limit?: number): Promise<LeaderboardEntry[]> {
+	const q = limit != null ? `?limit=${limit}` : '';
+	const resp = await fetch(`${API_BASE}/api/leaderboard${q}`);
+	if (!resp.ok) throw new Error(`leaderboard ${resp.status}`);
+	return (await resp.json()).entries as LeaderboardEntry[];
+}
+
 export function fmtClock(ms: number): string {
 	const s = Math.max(0, Math.floor(ms / 1000));
 	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
