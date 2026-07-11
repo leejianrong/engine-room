@@ -13,11 +13,11 @@ swappable transport and no server imports (ADR-0021).
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Awaitable, Callable, Optional, Union
 
 import chess
 
+from ._config import ENV_KEY, env_key, env_url
 from .const import (
     ACCEPT_DRAW,
     DEFAULT_URL,
@@ -53,8 +53,10 @@ class Bot:
     Override :meth:`choose_move`. Optionally override :meth:`on_game_start` /
     :meth:`on_game_over`. Then call :meth:`run`.
 
-    Config resolves from arguments first, then the environment: ``CHESSROOM_KEY``
-    (required) and ``CHESSROOM_URL`` (defaults to the live platform).
+    Config resolves from arguments first, then the environment: ``ENGINEROOM_KEY``
+    (required) and ``ENGINEROOM_URL`` (defaults to the live platform). The legacy
+    ``CHESSROOM_KEY`` / ``CHESSROOM_URL`` names are still accepted (deprecated,
+    warned once) — KAN-71.
     """
 
     def __init__(
@@ -65,8 +67,8 @@ class Bot:
         time_control: tuple[int, int] = (180, 0),
         connect: Optional[Callable[[], Awaitable[Transport]]] = None,
     ) -> None:
-        self.key = key or os.environ.get("CHESSROOM_KEY")
-        self.url = url or os.environ.get("CHESSROOM_URL") or DEFAULT_URL
+        self.key = key or env_key()
+        self.url = url or env_url() or DEFAULT_URL
         # The bot's display name/identity is set server-side from its API key
         # (created in the dashboard); there is no client-declared name (hello
         # carries only protocol_version + sdk, PROTOCOL §4).
@@ -103,7 +105,7 @@ class Bot:
     async def _run(self, *, loop: bool) -> None:
         if not self.key:
             raise ConfigError(
-                "No API key. Set CHESSROOM_KEY (e.g. in .env) or pass Bot(key=...)."
+                f"No API key. Set {ENV_KEY} (e.g. in .env) or pass Bot(key=...)."
             )
         while True:
             await self._play_one_game()

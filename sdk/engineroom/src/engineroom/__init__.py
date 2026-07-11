@@ -9,7 +9,7 @@ Write a bot in a few lines:
         def choose_move(self, board):
             return random.choice(list(board.legal_moves))
 
-    MyBot().run(loop=True)   # reads CHESSROOM_KEY / CHESSROOM_URL from the env
+    MyBot().run(loop=True)   # reads ENGINEROOM_KEY / ENGINEROOM_URL from the env
 
 The SDK owns the WebSocket transport, the authenticated handshake, reconnect,
 heartbeats, and all protocol (de)serialization (ADR-0021); you implement only

@@ -8,7 +8,8 @@ your own engine binary.
 
     engineroom-uci --engine /usr/bin/stockfish --think-time 0.1
 
-Reads ``CHESSROOM_KEY`` / ``CHESSROOM_URL`` from the environment like any bot.
+Reads ``ENGINEROOM_KEY`` / ``ENGINEROOM_URL`` from the environment like any bot
+(the legacy ``CHESSROOM_*`` names are still accepted, deprecated — KAN-71).
 """
 
 from __future__ import annotations
@@ -78,8 +79,8 @@ def main() -> None:
                    help="seconds per move (default 0.1)")
     p.add_argument("--depth", type=int, default=None,
                    help="fixed search depth (overrides --think-time)")
-    p.add_argument("--key", default=None, help="crbk_ API key (else CHESSROOM_KEY)")
-    p.add_argument("--url", default=None, help="WS URL (else CHESSROOM_URL / the live platform)")
+    p.add_argument("--key", default=None, help="crbk_ API key (else ENGINEROOM_KEY)")
+    p.add_argument("--url", default=None, help="WS URL (else ENGINEROOM_URL / the live platform)")
     p.add_argument("--base", type=int, default=180, help="clock base seconds (default 180)")
     p.add_argument("--inc", type=int, default=0, help="clock increment seconds (default 0)")
     p.add_argument("--loop", action="store_true", help="keep seeking new games")

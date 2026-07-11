@@ -25,7 +25,7 @@ SDK_VERSION = "0.1.0"
 SDK_UA = f"engineroom-py/{SDK_VERSION}"
 
 # Default WebSocket endpoint — the live platform (PROTOCOL §1, major version in the
-# path). Override with CHESSROOM_URL or Bot(url=...) for local dev
+# path). Override with ENGINEROOM_URL or Bot(url=...) for local dev
 # (ws://localhost:8001/api/bot/v1).
 DEFAULT_URL = "wss://engine-room.fly.dev/api/bot/v1"
 
