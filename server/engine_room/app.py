@@ -40,6 +40,7 @@ from .persistence.finalize import PostgresFinalizer
 from .persistence.reader import PostgresGameReader
 from .pubsub.inproc import InProcPubSub
 from .spectate.games import router as games_router
+from .spectate.leaderboard import leaderboard_router
 from .spectate.sse import router as spectate_router
 from .ws.bot_endpoint import router as bot_router
 from .ws.session_registry import SessionRegistry
@@ -253,6 +254,7 @@ def create_app(
     app.include_router(bot_router)
     app.include_router(spectate_router)
     app.include_router(games_router)
+    app.include_router(leaderboard_router)
 
     # Human identity REST surface (V2 / slice A2). Bot CRUD mounts in sub-step 3.
     app.include_router(
