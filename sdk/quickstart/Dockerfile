@@ -15,6 +15,6 @@ COPY quickstart /app
 
 RUN uv sync
 
-# Pass CHESSROOM_KEY (and CHESSROOM_URL) at runtime:
-#   docker run -e CHESSROOM_KEY=crbk_... my-bot
+# Pass ENGINEROOM_KEY (and ENGINEROOM_URL) at runtime:
+#   docker run -e ENGINEROOM_KEY=crbk_... my-bot
 CMD ["uv", "run", "python", "random_bot.py"]

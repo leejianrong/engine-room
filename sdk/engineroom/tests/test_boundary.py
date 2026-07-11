@@ -34,7 +34,7 @@ def test_no_server_imports_anywhere_in_the_package():
 def test_only_public_runtime_deps():
     # The SDK's third-party runtime imports are limited to its declared deps.
     allowed = {"chess", "websockets", "asyncio", "json", "os", "argparse", "random",
-               "ast", "pathlib", "dataclasses", "typing", "__future__"}
+               "ast", "pathlib", "dataclasses", "typing", "warnings", "__future__"}
     seen: set[str] = set()
     for py in _PKG.rglob("*.py"):
         for name in _imported_names(py):
