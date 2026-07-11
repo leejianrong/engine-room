@@ -179,7 +179,7 @@ may return `RESIGN`/`ACCEPT_DRAW` (§7). Reference bots `RandomBot`/`MinimaxBot`
 bots' logic (not shared-imported — O-1); a **UCI bridge** (`UCIBot` + a `engineroom-uci` console
 script) points a local engine like Stockfish at the platform, client-side. The `sdk/quickstart`
 template (`random_bot.py` + `.env.example` + README + optional Dockerfile) is the newcomer path:
-`git clone → uv sync → paste CHESSROOM_KEY → uv run python random_bot.py → playing`, wired as
+`git clone → uv sync → paste ENGINEROOM_KEY → uv run python random_bot.py → playing`, wired as
 `make sdk-bot`.
 
 Tests at three layers (Q6): SDK **unit** over an in-memory fake transport (happy path, pong,

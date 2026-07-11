@@ -76,7 +76,7 @@ To feel the real newcomer flow (what the quickstart README walks through):
 
 ```bash
 cd sdk/quickstart
-cp .env.example .env                  # paste a key from `make mint`; uncomment CHESSROOM_URL for local
+cp .env.example .env                  # paste a key from `make mint`; uncomment ENGINEROOM_URL for local
 uv sync
 uv run python random_bot.py
 ```
@@ -85,7 +85,7 @@ Point an existing UCI engine at the platform instead:
 
 ```bash
 cd sdk/engineroom
-CHESSROOM_KEY=crbk_... uv run engineroom-uci --engine /path/to/stockfish
+ENGINEROOM_KEY=crbk_... uv run engineroom-uci --engine /path/to/stockfish
 ```
 
 There's also `make bot` — the older dev demo client (`engine_room.devtools.demo_bot`, minimax,
