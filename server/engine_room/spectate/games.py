@@ -14,16 +14,20 @@ like the SSE endpoint.
 Both `/api/games*` endpoints degrade gracefully when no `game_reader` is injected
 (fast, DB-free tests): the lobby returns active games only; the detail serves an
 in-memory game or 404s. The bot-history endpoint is purely durable (finished
-games live only in Postgres), so with no reader it reports the bot as unknown.
+games live only in Postgres), so it reads through the request-scoped
+`get_async_session` DI seam (like `bots/routes.py` and the leaderboard) and 404s
+on a bot that isn't in the database.
 """
 
 from __future__ import annotations
 
 import chess
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..game.game import Game
+from ..persistence.db import get_async_session
 from ..persistence.models import Bot as BotRow
 from ..persistence.models import Game as GameRow
 
@@ -178,48 +182,47 @@ def _bot_game_entry(row: GameRow, bot_id: str) -> dict:
     }
 
 
-async def _bot_history(session_factory, bot_id: str, limit: int) -> dict | None:
+async def _bot_history(session: AsyncSession, bot_id: str, limit: int) -> dict | None:
     """`None` if the bot is unknown; otherwise its history + W/L/D summary.
 
     The summary is aggregated over ALL the bot's decided games (independent of the
     `limit` that only trims the returned per-game list)."""
-    async with session_factory() as session:
-        bot = await session.get(BotRow, bot_id)
-        if bot is None:
-            return None
+    bot = await session.get(BotRow, bot_id)
+    if bot is None:
+        return None
 
-        plays = or_(GameRow.white_bot_id == bot_id, GameRow.black_bot_id == bot_id)
-        decided = GameRow.result.in_(_DECIDED)
-        win = or_(
-            and_(GameRow.white_bot_id == bot_id, GameRow.result == "white_wins"),
-            and_(GameRow.black_bot_id == bot_id, GameRow.result == "black_wins"),
+    plays = or_(GameRow.white_bot_id == bot_id, GameRow.black_bot_id == bot_id)
+    decided = GameRow.result.in_(_DECIDED)
+    win = or_(
+        and_(GameRow.white_bot_id == bot_id, GameRow.result == "white_wins"),
+        and_(GameRow.black_bot_id == bot_id, GameRow.result == "black_wins"),
+    )
+    loss = or_(
+        and_(GameRow.white_bot_id == bot_id, GameRow.result == "black_wins"),
+        and_(GameRow.black_bot_id == bot_id, GameRow.result == "white_wins"),
+    )
+    wins, losses, draws = (
+        await session.execute(
+            select(
+                func.count().filter(win),
+                func.count().filter(loss),
+                func.count().filter(GameRow.result == "draw"),
+            ).where(plays, decided)
         )
-        loss = or_(
-            and_(GameRow.white_bot_id == bot_id, GameRow.result == "black_wins"),
-            and_(GameRow.black_bot_id == bot_id, GameRow.result == "white_wins"),
-        )
-        wins, losses, draws = (
+    ).one()
+
+    rows = (
+        (
             await session.execute(
-                select(
-                    func.count().filter(win),
-                    func.count().filter(loss),
-                    func.count().filter(GameRow.result == "draw"),
-                ).where(plays, decided)
+                select(GameRow)
+                .where(plays, decided)
+                .order_by(GameRow.finished_at.desc())
+                .limit(limit)
             )
-        ).one()
-
-        rows = (
-            (
-                await session.execute(
-                    select(GameRow)
-                    .where(plays, decided)
-                    .order_by(GameRow.finished_at.desc())
-                    .limit(limit)
-                )
-            )
-            .scalars()
-            .all()
         )
+        .scalars()
+        .all()
+    )
 
     return {
         "bot": {"bot_id": bot.id, "name": bot.name},
@@ -235,20 +238,18 @@ async def _bot_history(session_factory, bot_id: str, limit: int) -> dict | None:
 
 
 @router.get("/api/bots/{bot_id}/games")
-async def bot_game_history(bot_id: str, request: Request, limit: int = 50) -> dict:
+async def bot_game_history(
+    bot_id: str,
+    limit: int = 50,
+    session: AsyncSession = Depends(get_async_session),
+) -> dict:
     """A bot's finished-game history (newest first) + a W/L/D summary (KAN-53).
 
     Public + read-only, like the lobby. Finished games are durable-only, so this
-    reads through the injected `game_reader`'s session; with no reader wired (fast
-    DB-free tests) there is no history to serve and the bot reads as unknown."""
-    reader = getattr(request.app.state, "game_reader", None)
-    session_factory = getattr(reader, "_session_factory", None)
+    reads through the request-scoped `get_async_session` DI seam (like
+    `bots/routes.py` / the leaderboard); a bot not in the DB → 404."""
     limit = max(1, min(limit, 200))
-    history = (
-        await _bot_history(session_factory, bot_id, limit)
-        if session_factory is not None
-        else None
-    )
+    history = await _bot_history(session, bot_id, limit)
     if history is None:
         raise HTTPException(status_code=404, detail="no such bot")
     return history

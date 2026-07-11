@@ -5,8 +5,9 @@ A bot's FINISHED games are projected from THAT bot's perspective — result beco
 win/loss/draw for it (derived from the stored result + which colour it played),
 the opponent is the other seat, and the rating change is this bot's own colour's
 {before, after}. Aborted games and games the bot didn't play are excluded, and
-the summary W/L/D is aggregated over all of its decided games. Mirrors
-test_v6_lobby_replay's ASGITransport + injected PostgresGameReader wiring.
+the summary W/L/D is aggregated over all of its decided games. Uses an
+ASGITransport client with the request-scoped `get_async_session` dependency bound
+to the ephemeral testcontainer (the REST DI seam, like the conftest `app`).
 """
 
 from datetime import datetime, timedelta, timezone
@@ -14,9 +15,9 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from engine_room.app import create_app
+from engine_room.persistence.db import get_async_session
 from engine_room.persistence.models import Bot as BotRow
 from engine_room.persistence.models import Game as GameRow
-from engine_room.persistence.reader import PostgresGameReader
 
 _T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -157,7 +158,14 @@ async def _seed(session_factory) -> None:
 
 
 def _app(session_factory):
-    return create_app(game_reader=PostgresGameReader(session_factory))
+    app = create_app()
+
+    async def _override_session():
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_async_session] = _override_session
+    return app
 
 
 async def test_bot_history_summary_and_perspective(session_factory):
