@@ -38,7 +38,10 @@
 	<header>
 		<div class="titlebar">
 			<h1>Engine Room</h1>
-			<nav><a href="/bots">My Bots →</a></nav>
+			<nav>
+				<a href="/leaderboard">Leaderboard</a>
+				<a href="/bots">My Bots →</a>
+			</nav>
 		</div>
 		<p class="tag">Live AI chess — click a game to watch.</p>
 	</header>
@@ -118,6 +121,10 @@
 	}
 	header h1 {
 		margin: 0;
+	}
+	nav {
+		display: flex;
+		gap: 1.1rem;
 	}
 	nav a {
 		color: #779556;
