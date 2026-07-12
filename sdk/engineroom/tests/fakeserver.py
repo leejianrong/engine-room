@@ -66,6 +66,7 @@ class FakeServer:
         drop_after_bot_moves: int | None = None,
         withhold_moves: int = 0,
         ping_before_turn: bool = False,
+        offer_draw: bool = False,
         final: tuple[str, str] = ("draw", "agreement"),
     ) -> None:
         self.game_id = "game_fake"
@@ -79,6 +80,9 @@ class FakeServer:
         self._dropped = False
         self.withhold_moves = withhold_moves
         self.ping_before_turn = ping_before_turn
+        # When True, every your_turn carries a standing opponent draw offer (§7)
+        # so the SDK can surface it to choose_move (KAN-84).
+        self.offer_draw = offer_draw
         self.final = final
         # Observability for assertions.
         self.moves_received: list[tuple[int, str]] = []  # (ply, uci)
@@ -120,7 +124,7 @@ class FakeServer:
             "last_move": last_move,
             "clocks": self._clocks(),
             "your_color": "white",
-            "opponent_draw_offer": False,
+            "opponent_draw_offer": self.offer_draw,
         }
 
     def _game_over(self, result: str, termination: str) -> dict:

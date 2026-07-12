@@ -45,7 +45,7 @@ class _Sentinel:
 
 #: Return from ``choose_move`` to resign the game (opponent wins). PROTOCOL §7.
 RESIGN = _Sentinel("RESIGN")
-#: Return from ``choose_move`` when ``state.opponent_draw_offer`` is set to accept
+#: Return from ``choose_move`` when ``self.opponent_draw_offer`` is set to accept
 #: the draw (→ ``agreement``). PROTOCOL §7. Returning a normal move declines it.
 ACCEPT_DRAW = _Sentinel("ACCEPT_DRAW")
 

@@ -51,9 +51,16 @@ You never see a disconnect.
 
 ## Beyond `choose_move`
 
-- Return `engineroom.RESIGN` from `choose_move` to resign; when
-  `state.opponent_draw_offer` is set, return `engineroom.ACCEPT_DRAW` to agree a
-  draw (a normal move declines it).
+- Return `engineroom.RESIGN` from `choose_move` to resign; when the opponent has a
+  standing draw offer, `self.opponent_draw_offer` is `True` for that call — return
+  `engineroom.ACCEPT_DRAW` to agree (a normal move declines it):
+
+  ```python
+  def choose_move(self, board):
+      if self.opponent_draw_offer:      # set by the SDK before each call
+          return engineroom.ACCEPT_DRAW
+      return random.choice(list(board.legal_moves))
+  ```
 - Override `on_game_start(info)` / `on_game_over(result)` for optional callbacks.
 
 ## Reference bots
