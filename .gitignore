@@ -16,9 +16,13 @@ node_modules/
 frontend/build/
 frontend/.vercel/
 
+# Docs site build output (Zensical → site/; rebuilt in CI on deploy)
+site/
+
 # Env / secrets (bot API keys, etc.)
 .env
 *.local
+.mcp.json
 
 # OS
 .DS_Store
