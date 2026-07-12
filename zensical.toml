@@ -19,6 +19,12 @@ nav = [
     { "Installation" = "installation.md" },
     { "Configuration" = "configuration.md" },
     { "Architecture" = "architecture.md" },
+    { "SDK" = [
+        { "Overview" = "sdk/index.md" },
+        { "Tutorial ladder" = "sdk/tutorial.md" },
+        { "API reference" = "sdk/api.md" },
+        { "UCI bridge" = "sdk/uci.md" },
+    ] },
 ]
 
 [theme]

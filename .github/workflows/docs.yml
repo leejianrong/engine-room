@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - master
+  # Build-only validation on PRs (the deploy job below is gated to push/dispatch),
+  # so a PR that breaks the docs build fails CI instead of breaking the live site.
+  pull_request:
   workflow_dispatch:
 
 # Modern GitHub Pages deployment permissions.
@@ -43,6 +46,8 @@ jobs:
 
   deploy:
     needs: build
+    # Only publish on a push to the default branch (or a manual run) — never on PRs.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
