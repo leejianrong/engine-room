@@ -117,8 +117,9 @@ and you don't need to read it to write a bot.
 `choose_move` can do more than return a move:
 
 - Return `engineroom.RESIGN` to give up the game.
-- When the position carries a standing draw offer, return `engineroom.ACCEPT_DRAW`
-  to agree the draw. Playing a normal move declines it.
+- When the opponent offers a draw, the SDK sets `self.opponent_draw_offer` to
+  `True` for that turn — return `engineroom.ACCEPT_DRAW` to agree the draw. Playing
+  a normal move declines it.
 
 Two optional hooks let you observe the game without touching the loop:
 `on_game_start(info)` and `on_game_over(result)`. See the

@@ -82,11 +82,22 @@ class Bot:
         self._reconnect_attempts = 5
         self._reconnect_backoff = 0.5
         self._t: Optional[Transport] = None
+        # The current turn's state, set just before each ``choose_move`` call so
+        # the hook can react to it without a signature change (KAN-84). Read
+        # ``self.opponent_draw_offer`` to decide whether to return ACCEPT_DRAW;
+        # ``self.turn_state`` exposes the full frame for advanced use. Both stay
+        # None/False until the first ``your_turn`` arrives.
+        self.turn_state: Optional[TurnState] = None
+        self.opponent_draw_offer: bool = False
 
     # ------------------------------------------------------------------ hooks
     def choose_move(self, board: chess.Board) -> Decision:
         """Return the move to play as a ``chess.Move`` or a UCI string, or a
-        control sentinel (``engineroom.RESIGN`` / ``engineroom.ACCEPT_DRAW``)."""
+        control sentinel (``engineroom.RESIGN`` / ``engineroom.ACCEPT_DRAW``).
+
+        When the opponent has a standing draw offer, ``self.opponent_draw_offer``
+        is ``True`` for this call — return ``engineroom.ACCEPT_DRAW`` to agree,
+        or a normal move to decline. ``self.turn_state`` holds the full frame."""
         raise NotImplementedError
 
     def on_game_start(self, info: GameStart) -> None:  # noqa: D401 - optional hook
@@ -183,8 +194,12 @@ class Bot:
 
     def _decide(self, state: TurnState) -> Decision:
         board = chess.Board(state.fen)
-        # `board` already reflects the standing draw offer via
-        # state.opponent_draw_offer; the bot decides by what it returns.
+        # Surface this turn's raw state on the instance so choose_move can read
+        # it without changing its signature (KAN-84). A pending opponent draw
+        # offer is *not* encoded in the FEN, so a bot that wants to accept must
+        # check self.opponent_draw_offer and return engineroom.ACCEPT_DRAW.
+        self.turn_state = state
+        self.opponent_draw_offer = state.opponent_draw_offer
         return self.choose_move(board)
 
     # --------------------------------------------------------------- framing

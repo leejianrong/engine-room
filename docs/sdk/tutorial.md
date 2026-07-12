@@ -280,14 +280,17 @@ class MyBot(Bot):
     def choose_move(self, board):
         if is_hopeless(board):            # your own judgement of the position
             return RESIGN
-        if looks_drawn(board):            # e.g. bare kings, dead-level material
-            return ACCEPT_DRAW            # agrees a standing draw offer
+        if self.opponent_draw_offer:      # the opponent offered a draw this turn
+            return ACCEPT_DRAW            # agree it (a normal move declines)
         return my_best_move(board)
 ```
 
-`choose_move` is handed the board, so both decisions come from the position you
-see. Returning `ACCEPT_DRAW` agrees a draw the opponent has offered; a normal move
-declines it. See the [API reference](api.md) for the full return contract.
+`choose_move` is handed the board, so the resign decision comes from the position
+you see. A draw offer isn't part of the position, though — the SDK sets
+`self.opponent_draw_offer` to `True` for the turn an offer is on the table, and
+returning `ACCEPT_DRAW` agrees it (a normal move declines). See the
+[API reference](api.md) for the full return contract and the per-turn state on
+`self`.
 
 ### Point an existing engine at the platform
 

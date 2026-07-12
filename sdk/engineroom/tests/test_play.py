@@ -125,6 +125,53 @@ async def test_accept_draw_sentinel_agrees_to_a_draw():
     assert server.draw_agreed is True
 
 
+async def test_choose_move_sees_pending_draw_offer_and_accepts():
+    # The server marks every your_turn with a standing draw offer. A bot that
+    # reads self.opponent_draw_offer can react to it and return ACCEPT_DRAW,
+    # producing a draw_accept control message (KAN-84).
+    server = FakeServer(max_plies=100, offer_draw=True)
+    seen: list[bool] = []
+
+    class DrawAware(Bot):
+        def choose_move(self, board):
+            seen.append(self.opponent_draw_offer)
+            if self.opponent_draw_offer:
+                return ACCEPT_DRAW
+            return next(iter(board.legal_moves))
+
+    await DrawAware(key="crbk_test", connect=server.connect)._run(loop=False)
+    assert seen[0] is True  # the flag was visible inside choose_move
+    assert server.draw_agreed is True  # → draw_accept reached the server
+
+
+async def test_opponent_draw_offer_is_false_when_none_pending():
+    # With no offer on the table the flag stays False every turn.
+    server = FakeServer(max_plies=4)  # offer_draw defaults to False
+    seen: list[bool] = []
+
+    class Observer(Bot):
+        def choose_move(self, board):
+            seen.append(self.opponent_draw_offer)
+            return next(iter(board.legal_moves))
+
+    await Observer(key="crbk_test", connect=server.connect)._run(loop=False)
+    assert seen and all(flag is False for flag in seen)
+
+
+async def test_plain_choose_move_ignores_offer_backcompat():
+    # A pre-KAN-84 bot with a plain choose_move(board) that never reads the new
+    # attribute keeps working: it ignores the standing offer and plays on.
+    server = FakeServer(max_plies=4, offer_draw=True)
+
+    class Plain(Bot):
+        def choose_move(self, board):
+            return next(iter(board.legal_moves))
+
+    await Plain(key="crbk_test", connect=server.connect)._run(loop=False)
+    assert server.draw_agreed is False
+    assert server.bot_move_count >= 1
+
+
 # --------------------------------------------------------------- codec check
 def test_reference_bots_pick_legal_moves():
     board = chess.Board()

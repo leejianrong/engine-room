@@ -48,6 +48,27 @@ true position — you never sync a board yourself. Read `board.legal_moves`,
 `board.turn`, `board.piece_map()`, push and pop candidate moves; it's an ordinary
 `chess.Board`.
 
+### Per-turn state on `self`
+
+Just before each `choose_move` call the SDK sets two read-only attributes on the
+bot, so you react to them without changing the method signature:
+
+| Attribute | Type | Meaning |
+|-----------|------|---------|
+| `self.opponent_draw_offer` | `bool` | `True` when the opponent has a standing draw offer this turn. Return `engineroom.ACCEPT_DRAW` to agree; a normal move declines it. |
+| `self.turn_state` | `TurnState` or `None` | The full parsed `your_turn` frame — `game_id`, `ply`, `fen`, `last_move`, `clocks`, `your_color`, `opponent_draw_offer` — for advanced use. `None` before the first turn. |
+
+A draw offer is **not** encoded in the FEN, so the board alone can't tell you one
+is pending — check `self.opponent_draw_offer`:
+
+```python
+class PeaceLover(Bot):
+    def choose_move(self, board):
+        if self.opponent_draw_offer:
+            return ACCEPT_DRAW
+        return random.choice(list(board.legal_moves))
+```
+
 !!! warning "Return a legal move, or forfeit"
     An illegal or unparseable move on your turn ends the game immediately — an
     instant forfeit. When in doubt, pick from `board.legal_moves`. The clock is also
@@ -61,8 +82,9 @@ from engineroom import RESIGN, ACCEPT_DRAW
 
 `RESIGN` and `ACCEPT_DRAW` are unique marker objects, not strings — return the
 object itself. `RESIGN` gives up the game at once. `ACCEPT_DRAW` accepts a draw the
-opponent has offered; if there's no standing offer it's a harmless no-op. Playing a
-normal move declines any offer on the table.
+opponent has offered — check `self.opponent_draw_offer` (above) to know when one is
+pending; if there's no standing offer it's a harmless no-op. Playing a normal move
+declines any offer on the table.
 
 Draws for the standard reasons — stalemate, insufficient material, threefold
 repetition, the fifty-move rule — are applied by the server automatically. You
