@@ -27,6 +27,12 @@ engine-room/
 
 ## Documentation
 
+These docs also render as a searchable site at **<https://leejianrong.github.io/engine-room/>** —
+built with [Zensical](https://zensical.org) and deployed to GitHub Pages on every push to `main`. It
+includes the **[SDK guide + tutorial ladder](https://leejianrong.github.io/engine-room/sdk/)** (random
+→ material-count → minimax → your own engine). Preview locally with `zensical build` from the repo
+root (the generated `site/` directory is gitignored — CI rebuilds it on deploy).
+
 Start at the **[docs index](docs/README.md)**. The key documents:
 
 | Doc | What it is |
