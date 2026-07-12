@@ -69,7 +69,7 @@ there's one origin and **CORS is not required**. In dev the Vite server on :5174
 `/auth`, `/users` to :8001 (`frontend/vite.config.ts`), so dev is same-origin too. The CORS
 middleware + `config.py cors_allow_origins` are kept (harmless) only for hosting the SPA elsewhere.
 
-## Testing (layered by cost — see docs/DEVELOPER-WORKFLOWS.md)
+## Testing (layered by cost)
 
 - `tests/unit/` — no external infra (in-process ASGI TestClient, or a real uvicorn thread with
   no DB). Fast; runs in the pre-push hook and CI.
@@ -115,7 +115,7 @@ middleware + `config.py cors_allow_origins` are kept (harmless) only for hosting
 
 - `docs/README.md` — index. `docs/design/` — REQS, CONTEXT (glossary/domain), PRD, PROTOCOL (wire
   contract), QUESTIONS. `docs/adr/` — 25 decision records. `docs/shaping/` — build plan
-  (frame → shaping → slices → V1-plan, V2-plan). `docs/DEVELOPER-WORKFLOWS.md` — the playbook;
+  (frame → shaping → slices → V1-plan, V2-plan).
   `docs/WORKFLOW-ADOPTION.md` — what we've adopted and what's deferred. `docs/sdk/` — the published
   **SDK guide + tutorial ladder** (random → GreedyBot → minimax → your own engine).
 - **Published docs site.** `docs/*.md` is built by **Zensical** (`zensical.toml`, Material theme) and

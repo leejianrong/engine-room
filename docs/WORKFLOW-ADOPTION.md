@@ -1,7 +1,6 @@
 # Workflow adoption — status
 
-Tracks how much of [DEVELOPER-WORKFLOWS.md](DEVELOPER-WORKFLOWS.md) (the portable playbook)
-engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2; Playwright
+Tracks how much of the portable dev-workflow playbook engine-room has adopted. **Phases A–C done; the Phase-D branch/PR flow adopted from V2; Playwright
 browser e2e adopted at V6.** Server-enforced branch protection is intentionally skipped (private
 repo — see divergences).
 

@@ -9,8 +9,7 @@ docs/
   shaping/    implementation plan — "how & in what order we build it"
 ```
 
-Dev process: [DEVELOPER-WORKFLOWS.md](DEVELOPER-WORKFLOWS.md) (the playbook) ·
-[WORKFLOW-ADOPTION.md](WORKFLOW-ADOPTION.md) (what we've adopted / deferred).
+Dev process: [WORKFLOW-ADOPTION.md](WORKFLOW-ADOPTION.md) (what we've adopted / deferred).
 
 ## design/ — product & contract corpus
 | Doc | What it is |
