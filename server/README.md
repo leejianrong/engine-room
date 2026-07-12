@@ -20,7 +20,7 @@ uv run alembic upgrade head
 uv run uvicorn engine_room.app:app --reload --port 8001
 # -> http://127.0.0.1:8001/health
 
-# Tests — layered by cost (see ../docs/DEVELOPER-WORKFLOWS.md)
+# Tests — layered by cost
 uv run pytest tests/unit -q          # fast, no infra (in-process ASGI / live-uvicorn-no-DB)
 uv run pytest tests/integration -q   # needs Docker: ephemeral Postgres via testcontainers
 uv run pytest                        # everything
