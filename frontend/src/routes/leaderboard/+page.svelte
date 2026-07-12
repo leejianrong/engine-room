@@ -50,7 +50,7 @@
 					<tr>
 						<td class="rank">{e.rank}</td>
 						<td>
-							<span class="name">{e.name}</span>
+							<a class="name" href={`/bots/${e.bot_id}`}>{e.name}</a>
 							{#if e.is_house}<span class="house">house</span>{/if}
 						</td>
 						<td class="num rating">{e.rating}</td>
@@ -118,6 +118,12 @@
 	}
 	.name {
 		font-weight: 600;
+		color: inherit;
+		text-decoration: none;
+	}
+	a.name:hover {
+		color: #779556;
+		text-decoration: underline;
 	}
 	.house {
 		margin-left: 0.4rem;
