@@ -6,8 +6,61 @@
 	let error = $state('');
 	let loaded = $state(false);
 
+	// Client-side filters (KAN-54). 'all' = no filter.
+	let tcFilter = $state('all');
+	let ratingFilter = $state('all');
+
 	const active = $derived(games.filter((g) => g.state === 'paired' || g.state === 'in_progress'));
 	const finished = $derived(games.filter((g) => g.state === 'finished' || g.state === 'aborted'));
+
+	// Combined-strength = average of the two seat ratings (unrated → 0).
+	function avgRating(g: LobbyEntry): number {
+		const w = g.white.rating ?? 0;
+		const b = g.black.rating ?? 0;
+		return (w + b) / 2;
+	}
+
+	type Band = { key: string; label: string; test: (r: number) => boolean };
+	const RATING_BANDS: Band[] = [
+		{ key: 'lt1200', label: 'Under 1200', test: (r) => r < 1200 },
+		{ key: '1200_1599', label: '1200–1599', test: (r) => r >= 1200 && r < 1600 },
+		{ key: 'gte1600', label: '1600+', test: (r) => r >= 1600 }
+	];
+
+	function ratingBand(g: LobbyEntry): string {
+		const r = avgRating(g);
+		return RATING_BANDS.find((b) => b.test(r))?.key ?? '';
+	}
+
+	// Time-control options come from the live data (e.g. "3+0", "5+0").
+	const tcOptions = $derived(
+		[...new Set(active.map((g) => fmtTimeControl(g.time_control)))].sort()
+	);
+
+	const filteredActive = $derived(
+		active.filter(
+			(g) =>
+				(tcFilter === 'all' || fmtTimeControl(g.time_control) === tcFilter) &&
+				(ratingFilter === 'all' || ratingBand(g) === ratingFilter)
+		)
+	);
+
+	// Featured = most-watched active game, tie-broken by combined rating (KAN-54).
+	const featured = $derived(
+		filteredActive.length
+			? filteredActive.reduce((best, g) =>
+					g.spectators !== best.spectators
+						? g.spectators > best.spectators
+							? g
+							: best
+						: avgRating(g) > avgRating(best)
+							? g
+							: best
+				)
+			: null
+	);
+
+	const restActive = $derived(filteredActive.filter((g) => g.game_id !== featured?.game_id));
 
 	async function poll() {
 		try {
@@ -50,11 +103,54 @@
 		<p class="error">Couldn’t reach the server: {error}</p>
 	{/if}
 
+	{#if featured}
+		<section class="featured-wrap">
+			<h2>Featured game</h2>
+			<a class="card featured" href={watchHref(featured)}>
+				<div class="row">
+					<span class="name big" class:turn={featured.to_move === 'white'}>{featured.white.name}</span>
+					<span class="rating">{featured.white.rating ?? '—'}</span>
+				</div>
+				<div class="row">
+					<span class="name big" class:turn={featured.to_move === 'black'}>{featured.black.name}</span>
+					<span class="rating">{featured.black.rating ?? '—'}</span>
+				</div>
+				<div class="meta">
+					<span class="tc">{fmtTimeControl(featured.time_control)}</span>
+					<span class="live">● move {featured.ply ?? 0}</span>
+					<span class="watchers">{featured.spectators} watching</span>
+				</div>
+			</a>
+		</section>
+	{/if}
+
 	<section>
-		<h2>Live games <span class="count">{active.length}</span></h2>
-		{#if active.length}
+		<div class="section-head">
+			<h2>Live games <span class="count">{filteredActive.length}</span></h2>
+			<div class="filters">
+				<label>
+					Rating
+					<select bind:value={ratingFilter}>
+						<option value="all">All</option>
+						{#each RATING_BANDS as b (b.key)}
+							<option value={b.key}>{b.label}</option>
+						{/each}
+					</select>
+				</label>
+				<label>
+					Time
+					<select bind:value={tcFilter}>
+						<option value="all">All</option>
+						{#each tcOptions as tc (tc)}
+							<option value={tc}>{tc}</option>
+						{/each}
+					</select>
+				</label>
+			</div>
+		</div>
+		{#if restActive.length}
 			<ul class="grid">
-				{#each active as g (g.game_id)}
+				{#each restActive as g (g.game_id)}
 					<li>
 						<a class="card" href={watchHref(g)}>
 							<div class="row">
@@ -68,14 +164,19 @@
 							<div class="meta">
 								<span class="tc">{fmtTimeControl(g.time_control)}</span>
 								<span class="live">● move {g.ply ?? 0}</span>
+								{#if g.spectators > 0}
+									<span class="watchers">{g.spectators} watching</span>
+								{/if}
 							</div>
 						</a>
 					</li>
 				{/each}
 			</ul>
-		{:else if loaded}
-			<p class="empty">No live games right now.</p>
-		{:else}
+		{:else if !featured && loaded}
+			<p class="empty">
+				{active.length ? 'No games match your filters.' : 'No live games right now.'}
+			</p>
+		{:else if !loaded}
 			<p class="empty">Loading…</p>
 		{/if}
 	</section>
@@ -144,6 +245,54 @@
 	}
 	.count {
 		color: #779556;
+	}
+	.section-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-end;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.section-head h2 {
+		flex: 1;
+		min-width: 8rem;
+	}
+	.filters {
+		display: flex;
+		gap: 0.9rem;
+		padding-bottom: 0.3rem;
+	}
+	.filters label {
+		font-size: 0.72rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #888;
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.filters select {
+		font: inherit;
+		font-size: 0.85rem;
+		text-transform: none;
+		letter-spacing: normal;
+		color: inherit;
+		background: transparent;
+		border: 1px solid var(--line, #e2e2e2);
+		border-radius: 6px;
+		padding: 0.2rem 0.4rem;
+	}
+	.featured .name.big {
+		font-size: 1.15rem;
+	}
+	.card.featured {
+		border-color: #779556;
+		border-width: 2px;
+		background: color-mix(in srgb, #779556 6%, transparent);
+	}
+	.watchers {
+		color: #888;
+		font-variant-numeric: tabular-nums;
 	}
 	.grid {
 		list-style: none;

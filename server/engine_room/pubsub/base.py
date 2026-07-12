@@ -30,3 +30,7 @@ class PubSub(Protocol):
 
     async def publish(self, channel: str, event: dict) -> None:
         ...
+
+    def subscriber_count(self, channel: str) -> int:
+        """Number of live subscribers on `channel` (KAN-54 spectator counts)."""
+        ...

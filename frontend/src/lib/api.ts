@@ -30,6 +30,7 @@ export type LobbyEntry = {
 	time_control: TimeControl;
 	ply: number | null;
 	to_move: 'white' | 'black' | null;
+	spectators: number; // live SSE subscribers on this game (KAN-54); 0 when finished
 	started_at: string | null;
 	finished_at: string | null;
 	result: string | null;

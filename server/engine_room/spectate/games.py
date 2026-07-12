@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..channels import game_channel
 from ..game.game import Game
 from ..persistence.db import get_async_session
 from ..persistence.models import Bot as BotRow
@@ -41,7 +42,7 @@ def _tc(game: Game) -> dict:
     }
 
 
-def _active_lobby_entry(game: Game) -> dict:
+def _active_lobby_entry(game: Game, spectators: int = 0) -> dict:
     live = game.live
     if live is not None:
         ply = live.ply
@@ -56,6 +57,9 @@ def _active_lobby_entry(game: Game) -> dict:
         "time_control": _tc(game),
         "ply": ply,
         "to_move": to_move,
+        # Live SSE subscribers on this game's channel (KAN-54). Finished lobby
+        # entries carry 0 (no live stream).
+        "spectators": spectators,
         "started_at": game.created_at.isoformat(),
         "finished_at": None,
         "result": None,
@@ -97,10 +101,16 @@ def _live_game_view(game: Game) -> dict:
 @router.get("/api/games")
 async def list_games(request: Request) -> dict:
     registry = request.app.state.game_registry
+    pubsub = request.app.state.pubsub
     reader = getattr(request.app.state, "game_reader", None)
     limit = request.app.state.lobby_finished_limit
-    active = [_active_lobby_entry(g) for g in registry.list_active()]
+    active = [
+        _active_lobby_entry(g, pubsub.subscriber_count(game_channel(g.id)))
+        for g in registry.list_active()
+    ]
     finished = await reader.recent_finished(limit) if reader is not None else []
+    for entry in finished:
+        entry.setdefault("spectators", 0)
     return {"games": active + finished}
 
 
