@@ -19,7 +19,7 @@ heartbeats, and all protocol (de)serialization (ADR-0021); you implement only
 from __future__ import annotations
 
 from .bot import Bot
-from .bots import MinimaxBot, RandomBot
+from .bots import GreedyBot, MinimaxBot, RandomBot
 from .const import (
     ACCEPT_DRAW,
     DEFAULT_URL,
@@ -42,6 +42,7 @@ __version__ = SDK_VERSION
 __all__ = [
     "Bot",
     "RandomBot",
+    "GreedyBot",
     "MinimaxBot",
     "UCIBot",
     "RESIGN",

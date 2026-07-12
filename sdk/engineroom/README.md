@@ -58,8 +58,18 @@ You never see a disconnect.
 
 ## Reference bots
 
+The SDK ships one example per rung of the tutorial ladder (random → material-count
+→ minimax → your own engine) — copy one as a starting point:
+
 - `engineroom.RandomBot` — the hello-world (uniformly random legal move).
+- `engineroom.GreedyBot` — a one-ply, material-counting bot: it grabs the move that
+  maximizes its own material (free pieces, biggest capture). The natural next step
+  up from random, and a good baseline to beat with search.
 - `engineroom.MinimaxBot` — a depth-limited minimax + alpha-beta example.
+
+Each is a complete bot — `GreedyBot(key="crbk_...").run(loop=True)` just plays.
+Browse them side-by-side (name, level, and a `choose_move` snippet) in the live
+**Bot Gallery** at [`/gallery`](https://engine-room.fly.dev/gallery).
 
 ## UCI bridge
 
