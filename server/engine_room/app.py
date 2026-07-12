@@ -31,6 +31,11 @@ from .game.house_bots import (
     MinimaxBot,
     RandomBot,
 )
+from .game.house_clients import (
+    HouseBotClientSupervisor,
+    default_ambient_specs,
+    make_db_key_provider,
+)
 from .game.registry import GameRegistry
 from .matchmaking.elo import Windowing
 from .matchmaking.launcher import GameLauncher
@@ -87,9 +92,16 @@ async def _lifespan(app: FastAPI):
     # Start/stop the ambient house-vs-house feeder (V6). None when disabled.
     if app.state.ambient_supervisor is not None:
         await app.state.ambient_supervisor.start()
+    # KAN-61: out-of-process house bots. Spawning is non-blocking and the clients
+    # self-connect with retry, so this never deadlocks the lifespan. None unless the
+    # flag is on. Exactly one of ambient_supervisor / house_client_supervisor is set.
+    if app.state.house_client_supervisor is not None:
+        await app.state.house_client_supervisor.start()
     try:
         yield
     finally:
+        if app.state.house_client_supervisor is not None:
+            await app.state.house_client_supervisor.stop()
         if app.state.ambient_supervisor is not None:
             await app.state.ambient_supervisor.stop()
         await app.state.matchmaking_queue.stop()
@@ -130,6 +142,10 @@ def create_app(
     matcher_kwargs: dict | None = None,
     hb_kwargs: dict | None = None,
     static_dir: str | None = None,
+    house_bots_out_of_process: bool | None = None,
+    house_bot_ws_url: str | None = None,
+    house_bot_specs=None,
+    house_bot_key_provider=None,
 ) -> FastAPI:
     """Application factory.
 
@@ -157,6 +173,15 @@ def create_app(
 
     `static_dir` (V8) is the built SvelteKit SPA directory served same-origin (no
     nginx). None → `settings.static_dir` (empty in dev/tests → API-only, no mount).
+
+    `house_bots_out_of_process` (KAN-61) overrides `settings.house_bots_out_of_process`
+    (None → the setting). When True and `ambient_games > 0`, the ambient residents run
+    as external `engineroom` SDK-client subprocesses instead of the in-process
+    `AmbientSupervisor` (default). `house_bot_ws_url` is the URL those clients dial
+    back into (None → the setting); `house_bot_specs` overrides the identities/personas
+    (tests pass fast random-engine specs); `house_bot_key_provider` is the async
+    `spec -> crbk_ key` provisioner (None → mint keys against the DB house rows —
+    tests inject a DB-free provider returning known fake keys).
     """
     app = FastAPI(title="Engine Room", version=__version__, lifespan=_lifespan)
 
@@ -197,7 +222,29 @@ def create_app(
         MinimaxBot(id=JIAN_001_ID, name=JIAN_001_NAME, rating=JIAN_001_RATING, depth=depth),
         MinimaxBot(id=JIAN_002_ID, name=JIAN_002_NAME, rating=JIAN_002_RATING, depth=depth),
     )
-    if ambient_games > 0:
+    oop_house = (
+        settings.house_bots_out_of_process
+        if house_bots_out_of_process is None
+        else house_bots_out_of_process
+    )
+    # KAN-61: exactly one house-bot driver is active. Flag OFF (default) → the
+    # in-process AmbientSupervisor below (unchanged). Flag ON → the out-of-process
+    # SDK-client supervisor instead; the in-process feeder is left disabled so
+    # games aren't double-produced. The greeter stays in-process either way.
+    app.state.house_client_supervisor = None
+    if ambient_games > 0 and oop_house:
+        app.state.ambient_supervisor = None
+        tc = parse_pool(settings.ambient_pools[0])
+        specs = house_bot_specs or default_ambient_specs(
+            depth=settings.ambient_minimax_depth,
+            time_control=(tc.base_seconds, tc.increment_seconds),
+        )
+        app.state.house_client_supervisor = HouseBotClientSupervisor(
+            specs,
+            house_bot_ws_url or settings.house_bot_ws_url,
+            key_provider=house_bot_key_provider or make_db_key_provider(),
+        )
+    elif ambient_games > 0:
         delay = (
             ambient_move_delay_seconds
             if ambient_move_delay_seconds is not None
