@@ -13,7 +13,7 @@ import pytest
 from fakeserver import FakeServer
 
 import engineroom
-from engineroom import ACCEPT_DRAW, RESIGN, Bot, RandomBot
+from engineroom import ACCEPT_DRAW, RESIGN, Bot, GreedyBot, RandomBot
 
 
 def _bot(server: FakeServer, cls=RandomBot, **kw) -> Bot:
@@ -129,5 +129,17 @@ async def test_accept_draw_sentinel_agrees_to_a_draw():
 def test_reference_bots_pick_legal_moves():
     board = chess.Board()
     assert RandomBot(key="k").choose_move(board) in board.legal_moves
+    greedy = GreedyBot(key="k").choose_move(board)
+    assert chess.Move.from_uci(greedy) in board.legal_moves
     uci = engineroom.MinimaxBot(key="k").choose_move(board)
     assert chess.Move.from_uci(uci) in board.legal_moves
+
+
+def test_greedy_bot_grabs_the_hanging_queen():
+    # White rook on g1, White king on h1, a lone hanging Black queen on a1.
+    # The one-ply material grab is Rxa1; a greedy bot must take it.
+    board = chess.Board("7k/8/8/8/8/8/8/q5RK w - - 0 1")
+    uci = GreedyBot(key="k", seed=0).choose_move(board)
+    move = chess.Move.from_uci(uci)
+    assert move in board.legal_moves
+    assert move == chess.Move.from_uci("g1a1")
