@@ -179,5 +179,23 @@ class Settings(BaseSettings):
     # by move. Charged to the house's own clock — safe on a Blitz clock.
     house_move_delay_seconds: float = 0.0
 
+    # --- KAN-61: out-of-process house bots (additive, config-gated) ---
+    # FALSE (default): behaviour is exactly as today — the in-process
+    # AmbientSupervisor keeps the lobby's house-vs-house games live, and the greeter
+    # (ephraim) is synthesized in-process by the matcher. The production deploy is
+    # unchanged.
+    # TRUE: the permanent ambient residents (jian-bot-001/002) instead run as
+    # EXTERNAL `engineroom` SDK WebSocket clients in supervised subprocesses — they
+    # authenticate the real bot WS endpoint with `crbk_` keys and pair with each
+    # other through the normal matcher, so the games are real, persisted, and rated.
+    # The server never imports the SDK (ADR-0021): it only manages subprocesses. The
+    # on-demand greeter stays in-process either way (deferred — see the PR).
+    house_bots_out_of_process: bool = False
+    # The WS URL the out-of-process house-bot clients dial back into (this same
+    # server). Must be reachable from the subprocess; defaults to the local uvicorn
+    # port. The SDK client retries/backoff-connects, so it tolerates the server not
+    # yet accepting when the subprocess launches (self-connect timing, ADR-0025 #3).
+    house_bot_ws_url: str = "ws://127.0.0.1:8001/api/bot/v1"
+
 
 settings = Settings()
