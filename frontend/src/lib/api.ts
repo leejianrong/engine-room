@@ -84,6 +84,69 @@ export async function fetchLeaderboard(limit?: number): Promise<LeaderboardEntry
 	return (await resp.json()).entries as LeaderboardEntry[];
 }
 
+// ── Per-bot profile / game history (GET /api/bots/{bot_id}/games, KAN-53) ──────
+
+// One finished game shaped from the profiled bot's perspective.
+export type BotGameEntry = {
+	game_id: string;
+	color: 'white' | 'black';
+	result: 'win' | 'loss' | 'draw';
+	opponent: { bot_id: string | null; name: string; rating: number | null };
+	rating: { before: number; after: number } | null;
+	time_control: TimeControl;
+	termination: string | null;
+	finished_at: string | null;
+};
+
+export type BotHistory = {
+	bot: { bot_id: string; name: string };
+	summary: {
+		wins: number;
+		losses: number;
+		draws: number;
+		games_played: number;
+		rating: number;
+	};
+	games: BotGameEntry[];
+};
+
+export async function fetchBotHistory(botId: string, limit?: number): Promise<BotHistory> {
+	const q = limit != null ? `?limit=${limit}` : '';
+	const resp = await fetch(`${API_BASE}/api/bots/${botId}/games${q}`);
+	if (!resp.ok) throw new Error(`bot history ${resp.status}`);
+	return (await resp.json()) as BotHistory;
+}
+
+// Build a minimal, valid PGN from a finished game's detail view (client-side —
+// the API exposes SAN moves, not a raw PGN string). Used for per-game download.
+export function toPgn(g: GameView): string {
+	const res =
+		g.result === 'white_wins'
+			? '1-0'
+			: g.result === 'black_wins'
+				? '0-1'
+				: g.result === 'draw'
+					? '1/2-1/2'
+					: '*';
+	const headers = [
+		['Event', 'Engine Room'],
+		['Site', 'Engine Room'],
+		['White', g.white.name],
+		['Black', g.black.name],
+		['Result', res],
+		['Termination', g.termination ?? '?']
+	]
+		.map(([k, v]) => `[${k} "${String(v).replace(/"/g, "'")}"]`)
+		.join('\n');
+	let body = '';
+	for (let i = 0; i < g.moves.length; i++) {
+		if (i % 2 === 0) body += `${i / 2 + 1}. `;
+		body += `${g.moves[i].san} `;
+	}
+	body += res;
+	return `${headers}\n\n${body.trim()}\n`;
+}
+
 export function fmtClock(ms: number): string {
 	const s = Math.max(0, Math.floor(ms / 1000));
 	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
