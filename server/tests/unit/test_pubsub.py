@@ -39,6 +39,19 @@ async def test_publish_with_no_subscribers_is_a_noop():
     await ps.publish("chan", {"n": 3})
 
 
+async def test_subscriber_count_tracks_live_subscriptions():
+    ps = InProcPubSub()
+    assert ps.subscriber_count("chan") == 0
+    a = ps.subscribe("chan")
+    b = ps.subscribe("chan")
+    assert ps.subscriber_count("chan") == 2
+    assert ps.subscriber_count("other") == 0
+    a.close()
+    assert ps.subscriber_count("chan") == 1
+    b.close()
+    assert ps.subscriber_count("chan") == 0
+
+
 async def test_channels_are_isolated():
     ps = InProcPubSub()
     a = ps.subscribe("a")

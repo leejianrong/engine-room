@@ -35,6 +35,11 @@ class InProcPubSub:
         for sub in list(self._subs.get(channel, ())):
             sub.deliver(event)
 
+    def subscriber_count(self, channel: str) -> int:
+        """Live subscribers on `channel`. Only the SSE endpoint subscribes to a
+        game channel, so for `game:<id>` this is the spectator count (KAN-54)."""
+        return len(self._subs.get(channel, ()))
+
     def _remove(self, channel: str, sub: InProcSubscription) -> None:
         subs = self._subs.get(channel)
         if subs is not None:

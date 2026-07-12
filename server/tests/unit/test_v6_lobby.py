@@ -54,6 +54,31 @@ async def test_lobby_lists_active_game():
     assert entry["started_at"]
 
 
+async def test_lobby_reports_live_spectator_count():
+    """KAN-54: an active lobby entry carries the count of live SSE subscribers on
+    its game channel (0 when nobody is watching, then N)."""
+    from engine_room.channels import game_channel
+
+    app = create_app()
+    game = _running_house_game(app)
+    async with await _client(app) as client:
+        resp = await client.get("/api/games")
+        entry = next(g for g in resp.json()["games"] if g["game_id"] == game.id)
+        assert entry["spectators"] == 0
+
+        # Two spectators subscribe to this game's channel (as the SSE endpoint does).
+        subs = [app.state.pubsub.subscribe(game_channel(game.id)) for _ in range(2)]
+        resp = await client.get("/api/games")
+        entry = next(g for g in resp.json()["games"] if g["game_id"] == game.id)
+        assert entry["spectators"] == 2
+
+        subs[0].close()
+        resp = await client.get("/api/games")
+        entry = next(g for g in resp.json()["games"] if g["game_id"] == game.id)
+        assert entry["spectators"] == 1
+        subs[1].close()
+
+
 async def test_lobby_empty_when_no_games():
     app = create_app()
     async with await _client(app) as client:
