@@ -58,7 +58,7 @@ sdk-bot: ## Run the SDK quickstart RandomBot vs the house (mints a key; needs a 
 	@echo "Minting a local key and starting the quickstart RandomBot via the engineroom SDK…"
 	@KEY=$$(cd server && uv run python -m engine_room.devtools.mint_bot --quiet) && \
 	  cd sdk/quickstart && uv sync --quiet && \
-	  CHESSROOM_KEY=$$KEY CHESSROOM_URL=ws://localhost:8001/api/bot/v1 uv run python random_bot.py
+	  ENGINEROOM_KEY=$$KEY ENGINEROOM_URL=ws://localhost:8001/api/bot/v1 uv run python random_bot.py
 
 demo: ## One command: db + backend + frontend + a looping bot, all in Docker
 	@echo "Building & starting the whole platform + a demo bot…"
