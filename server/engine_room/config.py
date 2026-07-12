@@ -128,8 +128,12 @@ class Settings(BaseSettings):
     # for `mm_greeter_solo_wait_seconds` gets a house opponent (ADR-0022). Pools
     # NOT listed here (e.g. 5+0 "300+0") never get a greeter → a lonely seek there
     # expires, which is the V3 expiry demo. Keys are "<base>+<increment>" seconds.
+    # KAN-57: bullet 1+0 ("60+0") and an increment pool 2+1 ("120+1") join 3+0 so a
+    # lone seeker in either gets a greeter game (the greeter launcher runs at 0
+    # delay, so a short bullet clock plays cleanly). Seeks in any TC are always
+    # accepted (the endpoint doesn't whitelist); this only controls the greeter.
     mm_greeter_solo_wait_seconds: float = 3.0
-    mm_greeter_pools: list[str] = ["180+0"]
+    mm_greeter_pools: list[str] = ["180+0", "60+0", "120+1"]
 
     # --- V4 resilience (slice A4, ADR-0025 #3 / PROTOCOL §10) ---
     # Heartbeat: the server pings each live bot socket every `hb_ping_interval_seconds`;
@@ -159,7 +163,12 @@ class Settings(BaseSettings):
     # via the normal launcher (V6 Q4). Move delay makes them watchable.
     ambient_games: int = 2
     ambient_move_delay_seconds: float = 1.0
-    ambient_pool: str = "180+0"  # "<base>+<increment>" seconds — 3+0
+    # Time-control rotation for ambient house-vs-house games (KAN-57): the
+    # supervisor round-robins these across its `ambient_games` slots, so the lobby
+    # autonomously shows a mix and the increment path runs in real, persisted games.
+    # "<base>+<increment>" seconds — 3+0, bullet 1+0, and 2+1 (increment). A short
+    # bullet base (60s) survives the 1s move delay fine (~60 moves/side before flag).
+    ambient_pools: list[str] = ["180+0", "60+0", "120+1"]
     # The permanent ambient bots (jian-bot-NNN) play minimax + alpha-beta; this is
     # the search depth. Pure-Python CPU grows with depth, so dial it down on a small
     # VM (ER_AMBIENT_MINIMAX_DEPTH). Depth 3 ≈ 0.1-0.3s/move.

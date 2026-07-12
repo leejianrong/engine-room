@@ -45,7 +45,7 @@ def _supervisor(reg, launcher, n):
     a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)
     b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)
     return AmbientSupervisor(
-        reg, launcher, a, b, n=n, time_control=TimeControl(base_seconds=180)
+        reg, launcher, a, b, n=n, time_controls=[TimeControl(base_seconds=180)]
     )
 
 
@@ -63,6 +63,27 @@ async def test_supervisor_maintains_n_live_games():
     await sup.start()
     assert len(launcher.launched) == 2
     assert len(reg.list_active()) == 2  # both house-vs-house games live
+    await sup.stop()
+
+
+async def test_supervisor_rotates_time_controls():
+    """KAN-57: with a rotation of pools the live games span all of them (round-
+    robin across the N slots), so the lobby shows a mix (e.g. 3+0 + bullet)."""
+    reg = GameRegistry()
+    launcher = _FakeLauncher()
+    a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)
+    b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)
+    sup = AmbientSupervisor(
+        reg,
+        launcher,
+        a,
+        b,
+        n=2,
+        time_controls=[TimeControl(base_seconds=180), TimeControl(base_seconds=60)],
+    )
+    await sup.start()
+    bases = sorted(g.time_control.base_seconds for g in reg.list_active())
+    assert bases == [60, 180]  # one bullet, one 3+0 — both rotation entries live
     await sup.stop()
 
 

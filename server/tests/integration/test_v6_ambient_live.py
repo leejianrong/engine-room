@@ -49,7 +49,7 @@ async def test_ambient_games_persist_rate_and_respawn(session_factory):
     house_a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)  # jian-bot-001 (white)
     house_b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)  # jian-bot-002 (black)
     sup = AmbientSupervisor(
-        registry, launcher, house_a, house_b, n=2, time_control=TimeControl(base_seconds=180)
+        registry, launcher, house_a, house_b, n=2, time_controls=[TimeControl(base_seconds=180)]
     )
 
     await sup.start()

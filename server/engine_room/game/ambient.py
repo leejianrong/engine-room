@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 from ..protocol.messages import TimeControl
 from .game import Participant
@@ -45,14 +45,21 @@ class AmbientSupervisor:
         house_b: "RandomBot",
         *,
         n: int,
-        time_control: TimeControl,
+        time_controls: Sequence[TimeControl],
     ) -> None:
         self._registry = registry
         self._launcher = launcher
         self._house_a = house_a
         self._house_b = house_b
         self._n = n
-        self._tc = time_control
+        # KAN-57: round-robin a rotation of time controls across the `n` slots, so
+        # the lobby shows a mix (e.g. 3+0, bullet 1+0, 2+1 increment) rather than a
+        # single control. `_spawn_count` advances on every spawn AND refill, so the
+        # rotation keeps cycling as finished games are replaced.
+        self._tcs: list[TimeControl] = list(time_controls)
+        if not self._tcs:
+            raise ValueError("AmbientSupervisor needs at least one time control")
+        self._spawn_count = 0
         self._live: dict[asyncio.Task, str] = {}  # task -> game_id
         self._refills: set[asyncio.Task] = set()
         self._closing = False
@@ -85,10 +92,12 @@ class AmbientSupervisor:
             await self._spawn_one()
 
     async def _spawn_one(self) -> None:
+        tc = self._tcs[self._spawn_count % len(self._tcs)]
+        self._spawn_count += 1
         game = self._registry.create_game(
             white=Participant(bot=self._house_a.info, is_house=True, house=self._house_a),
             black=Participant(bot=self._house_b.info, is_house=True, house=self._house_b),
-            time_control=self._tc,
+            time_control=tc,
         )
         task = await self._launcher.launch(game)  # returns the run_game task
         self._live[task] = game.id
