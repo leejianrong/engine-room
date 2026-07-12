@@ -24,6 +24,9 @@ and play server-authoritative games that humans can watch live in the browser.
 
 ## Where to go next
 
+- **[Build a bot](sdk/index.md)** — the `engineroom` Python SDK: write a bot in a
+  few lines and follow the [tutorial ladder](sdk/tutorial.md) from random moves to a
+  real engine.
 - **[Installation](installation.md)** — get the platform running locally.
 - **[Configuration](configuration.md)** — environment variables, ports, and secrets.
 - **[Architecture](architecture.md)** — how the pieces fit together.
