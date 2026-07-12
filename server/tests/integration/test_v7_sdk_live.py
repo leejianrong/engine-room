@@ -24,6 +24,7 @@ import uvicorn
 from support.fake_client import FakeBotAuthenticator
 
 from engine_room.app import create_app
+from engine_room.config import settings
 from engine_room.protocol.messages import BotInfo
 
 # Import the packaged SDK from the monorepo sibling package (V7 Q1: it lives here
@@ -45,7 +46,18 @@ class _Server(uvicorn.Server):
 
 
 @contextlib.asynccontextmanager
-async def live_server(**app_kwargs):
+async def live_server(*, house_move_delay: float | None = None, **app_kwargs):
+    # KAN-83: the on-demand greeter game is launched via the main GameLauncher,
+    # whose house move delay comes from `settings.house_move_delay_seconds`
+    # (default 0.0 — instant). A RandomBot-vs-RandomBot greeter game with no delay
+    # finishes and is evicted from the registry (worker.py) in a fraction of a
+    # second, so the lobby's "live" window is a race any poll can lose. A test that
+    # asserts the game shows up live pins a small non-zero delay here so the game
+    # stays live for seconds — deterministically observable — without touching the
+    # production default. Restored on exit.
+    prev_delay = settings.house_move_delay_seconds
+    if house_move_delay is not None:
+        settings.house_move_delay_seconds = house_move_delay
     app = create_app(**app_kwargs)
     config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning")
     server = _Server(config)
@@ -58,6 +70,7 @@ async def live_server(**app_kwargs):
     finally:
         server.should_exit = True
         thread.join(timeout=5)
+        settings.house_move_delay_seconds = prev_delay
 
 
 async def _wait_for_lobby_game(hostport: str, name: str, *, timeout: float = 10.0) -> dict:
@@ -78,7 +91,12 @@ async def test_sdk_random_bot_plays_a_greeter_game_and_shows_in_lobby():
     authn = FakeBotAuthenticator(
         {"crbk_sdk": BotInfo(id="bot_sdk", name="sdk-bot", rating=1200, owner_id="u1")}
     )
-    async with live_server(bot_authenticator=authn, matcher_kwargs=_GREETER) as hp:
+    # KAN-83: pin a small house move delay so the greeter game stays live for
+    # seconds (≫ the 0.05s poll cadence) — the lobby assertion is no longer racing
+    # an instant, immediately-evicted game.
+    async with live_server(
+        bot_authenticator=authn, matcher_kwargs=_GREETER, house_move_delay=0.05
+    ) as hp:
         overs: list = []
 
         class Watched(RandomBot):
@@ -88,7 +106,7 @@ async def test_sdk_random_bot_plays_a_greeter_game_and_shows_in_lobby():
         bot = Watched(key="crbk_sdk", url=f"ws://{hp}{WS_PATH}", seed=7)
         task = asyncio.create_task(bot._run(loop=False))
         try:
-            entry = await _wait_for_lobby_game(hp, "sdk-bot")
+            entry = await _wait_for_lobby_game(hp, "sdk-bot", timeout=30.0)
             assert "ephraim-bot" in (entry["white"]["name"], entry["black"]["name"])
             await asyncio.wait_for(task, timeout=60)
         finally:
