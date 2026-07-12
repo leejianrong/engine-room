@@ -116,4 +116,17 @@ middleware + `config.py cors_allow_origins` are kept (harmless) only for hosting
 - `docs/README.md` — index. `docs/design/` — REQS, CONTEXT (glossary/domain), PRD, PROTOCOL (wire
   contract), QUESTIONS. `docs/adr/` — 25 decision records. `docs/shaping/` — build plan
   (frame → shaping → slices → V1-plan, V2-plan). `docs/DEVELOPER-WORKFLOWS.md` — the playbook;
-  `docs/WORKFLOW-ADOPTION.md` — what we've adopted and what's deferred.
+  `docs/WORKFLOW-ADOPTION.md` — what we've adopted and what's deferred. `docs/sdk/` — the published
+  **SDK guide + tutorial ladder** (random → GreedyBot → minimax → your own engine).
+- **Published docs site.** `docs/*.md` is built by **Zensical** (`zensical.toml`, Material theme) and
+  deployed to **GitHub Pages** by `.github/workflows/docs.yml` (on push to `main`; that workflow also
+  runs a build-only check on PRs) at **https://leejianrong.github.io/engine-room/**. Preview locally
+  from the repo root with `zensical build` (or `zensical serve`). The built `site/` dir is **generated
+  output — gitignored**, rebuilt fresh in CI (`zensical build --clean`); never commit it.
+
+## Local / generated files (gitignored — not committed)
+
+- **`site/`** — Zensical docs build output (above); regenerate with `zensical build`, don't commit.
+- **`.mcp.json`** — machine-local MCP wiring (the Kanban board's `mcp__kanban__*` server + its PAT).
+  Holds a credential, so it's gitignored and lives only on the dev machine — never tracked/committed.
+- `.claude/worktrees/` (transient agent worktrees) + `.claude/settings.local.json` (local settings).
