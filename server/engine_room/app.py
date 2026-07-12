@@ -215,7 +215,7 @@ def create_app(
             app.state.ambient_bots[0],
             app.state.ambient_bots[1],
             n=ambient_games,
-            time_control=parse_pool(settings.ambient_pool),
+            time_controls=[parse_pool(p) for p in settings.ambient_pools],
         )
     else:
         app.state.ambient_supervisor = None

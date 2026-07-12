@@ -38,7 +38,8 @@ def test_matchmaking_settings_defaults():
     assert s.mm_window_step == 100
     assert s.mm_window_uncap_seconds == 60.0
     assert s.mm_ticket_ttl_seconds == 120.0
-    assert s.mm_greeter_pools == ["180+0"]  # 3+0 greeter; 5+0 has none
+    # 3+0, bullet 1+0, and 2+1 increment are greeter-served (KAN-57); 5+0 has none.
+    assert s.mm_greeter_pools == ["180+0", "60+0", "120+1"]
 
 
 def test_matchmaking_settings_env_override(monkeypatch):
