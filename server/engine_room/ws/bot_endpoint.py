@@ -209,7 +209,22 @@ async def bot_ws(websocket: WebSocket) -> None:
                 await session.send(Error(code=exc.code, message=exc.message, fatal=False))
                 continue
 
-            if isinstance(msg, Seek):
+            if isinstance(msg, Seek) and msg.tournament_id is not None:
+                # KAN-56: a tournament-tagged seek is an ENROLLMENT, not a pairing.
+                # Ack with status "enrolled", or reject with INVALID_TOURNAMENT
+                # (mirrors KAN-55's non-fatal direct-challenge rejection).
+                enroll = await websocket.app.state.tournament_manager.enroll(
+                    session, msg.tournament_id
+                )
+                if not enroll.ok:
+                    await session.send(
+                        Error(code=enroll.error_code, message=enroll.error_message)
+                    )
+                else:
+                    await session.send(
+                        SeekAck(id=msg.id, seek_id=enroll.seek_id, status="enrolled")
+                    )
+            elif isinstance(msg, Seek):
                 result = await queue.seek(
                     session, msg.time_control, opponent_bot_id=msg.opponent_bot_id
                 )

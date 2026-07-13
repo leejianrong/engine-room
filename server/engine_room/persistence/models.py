@@ -15,7 +15,16 @@ from fastapi_users_db_sqlalchemy import (
 )
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import GUID
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -113,3 +122,87 @@ class Game(Base):
     black_rating_after: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# --- KAN-56 tournaments (round-robin, first slice) ------------------------------
+# Persisted, single-process-orchestrated (like MatchmakingQueue). A `TournamentManager`
+# on app.state enrolls bots (via a tournament-tagged `seek`), generates the circle-
+# method schedule at start, launches each game over the existing GameLauncher, and
+# writes standings back here as games finalize. Only round-robin is built now; swiss
+# + elimination brackets are deferred follow-up cards.
+
+
+class Tournament(Base):
+    """A persisted tournament. `format` is fixed to 'round_robin' in this slice.
+
+    `target_size` is the number of entrants that auto-starts the event (also
+    startable explicitly). Lifecycle: pending → running → finished (ADR-0010-style
+    vocabulary, tournament-scoped)."""
+
+    __tablename__ = "tournaments"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)  # "tour_..."
+    name: Mapped[str] = mapped_column(String(128))
+    format: Mapped[str] = mapped_column(String(16), default="round_robin")
+    base_seconds: Mapped[int] = mapped_column(Integer)  # time control base (e.g. 180)
+    increment_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    target_size: Mapped[int] = mapped_column(Integer)  # entrants that auto-start it
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|running|finished
+    # Creating human (US-style owner). Nullable + SET NULL so a user deletion keeps
+    # the tournament's history (mirrors games' bot FKs, D-f).
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TournamentEntry(Base):
+    """One bot enrolled in a tournament + its running score (win=1, draw=0.5).
+
+    A bot enrolls by seeking with a `tournament_id`; `unique(tournament_id, bot_id)`
+    makes a double-enroll a no-op at the DB level as well as in the manager."""
+
+    __tablename__ = "tournament_entries"
+    __table_args__ = (UniqueConstraint("tournament_id", "bot_id", name="uq_entry_tour_bot"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)  # "tent_..."
+    tournament_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey("tournaments.id", ondelete="CASCADE"), index=True
+    )
+    bot_id: Mapped[str] = mapped_column(String(40), ForeignKey("bots.id", ondelete="CASCADE"))
+    seed: Mapped[int] = mapped_column(Integer)  # join order — drives pairing rotation
+    score: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+
+
+class TournamentGame(Base):
+    """One scheduled pairing + its result — the schedule AND the results table.
+
+    Written pending (result NULL) when the schedule is generated, then filled in as
+    each pairing resolves. `game_id` links to the actual `games` row when a real game
+    was played; it stays NULL for a forfeit (an entrant offline when its game was
+    due), a `void` (both offline), or a `bye` (odd field). This keeps the hot `games`
+    write path (the finalizer) untouched — all tournament state lives here — and lets
+    unplayed pairings be represented without a games row (which a `tournament_id`
+    column on `games` could not do). `black_bot_id` is NULL on a bye."""
+
+    __tablename__ = "tournament_games"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)  # "tgame_..."
+    tournament_id: Mapped[str] = mapped_column(
+        String(40), ForeignKey("tournaments.id", ondelete="CASCADE"), index=True
+    )
+    round: Mapped[int] = mapped_column(Integer)  # 0-based round number
+    white_bot_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey("bots.id", ondelete="SET NULL"), nullable=True
+    )
+    black_bot_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey("bots.id", ondelete="SET NULL"), nullable=True
+    )
+    # NULL until resolved; then white_wins|black_wins|draw (played or forfeit) |
+    # void (both offline) | bye (odd field). aborted games score no points.
+    result: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    game_id: Mapped[str | None] = mapped_column(
+        String(40), ForeignKey("games.id", ondelete="SET NULL"), nullable=True
+    )

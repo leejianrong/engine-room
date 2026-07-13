@@ -51,6 +51,12 @@ class Seek(BaseModel):
     # the normal widening-window queue. The target must be online and idle; the
     # challenger sets the time control. See PROTOCOL.md §5.
     opponent_bot_id: Optional[str] = None
+    # KAN-56 tournament opt-in: when set, this seek is an ENROLLMENT into that
+    # tournament (not an immediate pairing) — the bot is added as an entry and,
+    # once the field is full, the round-robin runs and launches its games. Acked
+    # with seek_ack{status:"enrolled"} or rejected with error{INVALID_TOURNAMENT}.
+    # Takes precedence over opponent_bot_id / the queue. See PROTOCOL.md §5.
+    tournament_id: Optional[str] = None
 
 
 class SeekCancel(BaseModel):
