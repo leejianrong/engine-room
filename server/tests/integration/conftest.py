@@ -10,12 +10,23 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 
 @pytest.fixture(scope="session")
 def _postgres_url():
     with PostgresContainer("postgres:16", driver="psycopg") as pg:
         yield pg.get_connection_url()  # postgresql+psycopg://...
+
+
+@pytest.fixture(scope="session")
+def redis_url():
+    """Ephemeral Redis for the KAN-62 cross-worker pub/sub test. Only tests that
+    request it spin up the container (like `_postgres_url`)."""
+    with RedisContainer("redis:7") as redis:
+        host = redis.get_container_host_ip()
+        port = redis.get_exposed_port(6379)
+        yield f"redis://{host}:{port}/0"
 
 
 @pytest_asyncio.fixture

@@ -45,6 +45,7 @@ from .observability import RequestIdMiddleware, render_metrics, setup_logging
 from .persistence.finalize import PostgresFinalizer
 from .persistence.reader import PostgresGameReader
 from .pubsub.inproc import InProcPubSub
+from .pubsub.redis import RedisPubSub
 from .spectate.games import router as games_router
 from .spectate.leaderboard import leaderboard_router
 from .spectate.sse import router as spectate_router
@@ -88,6 +89,11 @@ def _mount_spa(app: FastAPI, static_dir: str) -> None:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    # Start/stop the cross-worker SSE bus if it needs it (KAN-62). InProcPubSub has
+    # no start/stop (nothing to run); RedisPubSub opens its shared connection +
+    # pattern-reader here, mirroring how the matchmaking queue is started/stopped.
+    if hasattr(app.state.pubsub, "start"):
+        await app.state.pubsub.start()
     # Start/stop the background matchmaker loop (V3). No-op for AlwaysPairQueue.
     await app.state.matchmaking_queue.start()
     # Start/stop the ambient house-vs-house feeder (V6). None when disabled.
@@ -106,6 +112,8 @@ async def _lifespan(app: FastAPI):
         if app.state.ambient_supervisor is not None:
             await app.state.ambient_supervisor.stop()
         await app.state.matchmaking_queue.stop()
+        if hasattr(app.state.pubsub, "stop"):
+            await app.state.pubsub.stop()
 
 
 def _default_matcher(app: FastAPI, matcher_kwargs: dict | None) -> EloMatchmaker:
@@ -210,7 +218,12 @@ def create_app(
     # The ephemeral greeter persona (ephraim-bot): easy/random, one-and-done. Used
     # by the on-demand greeter (Kind-2) and V1's always-pair test queue.
     app.state.house_bot = RandomBot()
-    app.state.pubsub = InProcPubSub()
+    # SSE fan-out bus (R6, ADR-0020). Empty ER_REDIS_URL (the default everywhere
+    # today) → the single-process in-process bus. Set → the Redis-backed bus that
+    # fans events across workers (KAN-62); its start/stop is hooked in _lifespan.
+    app.state.pubsub = (
+        RedisPubSub(settings.redis_url) if settings.redis_url else InProcPubSub()
+    )
     app.state.finalizer = finalizer
     # Turns a paired Game into a running game: game_start fan-out + run_game
     # spawn (D-c). Shared by the always-pair path and the V3 matcher.

@@ -110,6 +110,15 @@ class Settings(BaseSettings):
     # ER_STATIC_DIR to it.
     static_dir: str = ""
 
+    # --- KAN-62 cross-worker SSE fan-out (first slice) ---
+    # Redis URL for the spectator-event bus. EMPTY (default) → the in-process bus
+    # (`InProcPubSub`) is used, so single-process dev/CI/prod behave exactly as today.
+    # SET (e.g. redis://localhost:6379/0) → `RedisPubSub`, which PSUBSCRIBEs `game:*`
+    # on one shared connection and fans events out across workers. Only the SSE
+    # fan-out bus rides Redis in this slice; matchmaking/game state stay single-process
+    # (shared matchmaking state + crash recovery are deferred follow-ups on KAN-62).
+    redis_url: str = ""
+
     # --- KAN-63 observability (first slice) ---
     # Root log level and whether logs are emitted as one JSON object per line
     # (structured, request_id/game_id threaded) vs a plain human line. JSON is the
