@@ -35,6 +35,7 @@ from .game.house_clients import (
     HouseBotClientSupervisor,
     default_ambient_specs,
     make_db_key_provider,
+    make_db_rating_provider,
 )
 from .game.registry import GameRegistry
 from .matchmaking.elo import Windowing
@@ -161,6 +162,7 @@ def create_app(
     house_bot_ws_url: str | None = None,
     house_bot_specs=None,
     house_bot_key_provider=None,
+    ambient_rating_provider=None,
     tournament_session_factory=None,
 ) -> FastAPI:
     """Application factory.
@@ -293,6 +295,7 @@ def create_app(
             app.state.ambient_bots[1],
             n=ambient_games,
             time_controls=[parse_pool(p) for p in settings.ambient_pools],
+            rating_provider=ambient_rating_provider,
         )
     else:
         app.state.ambient_supervisor = None
@@ -392,4 +395,5 @@ app = create_app(
     bot_authenticator=PostgresBotAuthenticator(),
     game_reader=PostgresGameReader(),
     ambient_games=settings.ambient_games,
+    ambient_rating_provider=make_db_rating_provider(),
 )

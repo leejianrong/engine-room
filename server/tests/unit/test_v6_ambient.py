@@ -123,6 +123,63 @@ async def test_stop_cancels_and_clears():
     assert reg.list_active() == []
 
 
+async def test_supervisor_refreshes_rating_from_provider():
+    """KAN-207: with a rating_provider each launched game carries the bots'
+    *current* persisted rating (not the static boot value), so the live lobby view
+    matches the profile page. The shared house objects stay untouched (per-game
+    copy)."""
+    reg = GameRegistry()
+    launcher = _FakeLauncher()
+    a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)  # boot rating 1200
+    b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)
+    current = {JIAN_001_ID: 1512, JIAN_002_ID: 1487}
+
+    async def provider(bot_id):
+        return current.get(bot_id)
+
+    sup = AmbientSupervisor(
+        reg,
+        launcher,
+        a,
+        b,
+        n=1,
+        time_controls=[TimeControl(base_seconds=180)],
+        rating_provider=provider,
+    )
+    await sup.start()
+    game = reg.list_active()[0]
+    assert (game.white.bot.rating, game.black.bot.rating) == (1512, 1487)
+    assert a.info.rating == 1200 and b.info.rating == 1200  # shared objects intact
+    await sup.stop()
+
+
+async def test_supervisor_rating_provider_none_keeps_static():
+    """No provider (the DB-free default) → the static boot rating is used as-is,
+    and a provider that returns None (missing row) falls back the same way."""
+    reg = GameRegistry()
+    launcher = _FakeLauncher()
+    sup = _supervisor(reg, launcher, n=1)  # no rating_provider
+    await sup.start()
+    assert reg.list_active()[0].white.bot.rating == 1200  # boot default, unchanged
+    await sup.stop()
+
+    reg2 = GameRegistry()
+    launcher2 = _FakeLauncher()
+    a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)
+    b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)
+
+    async def missing(bot_id):
+        return None
+
+    sup2 = AmbientSupervisor(
+        reg2, launcher2, a, b, n=1,
+        time_controls=[TimeControl(base_seconds=180)], rating_provider=missing,
+    )
+    await sup2.start()
+    assert reg2.list_active()[0].white.bot.rating == 1200  # None → fallback
+    await sup2.stop()
+
+
 def test_house_bot_personas_pick_legal_moves():
     """The two personas: ephraim (RandomBot, easy) and jian (MinimaxBot)."""
     import chess

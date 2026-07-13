@@ -19,15 +19,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Awaitable, Callable, Optional, Sequence
 
-from ..protocol.messages import TimeControl
+from ..protocol.messages import BotInfo, TimeControl
 from .game import Participant
 
 if TYPE_CHECKING:
     from ..matchmaking.launcher import GameLauncher
     from .house_bots import RandomBot
     from .registry import GameRegistry
+
+# Reads a bot's current persisted rating by id (None if the row is missing). See
+# `house_clients.make_db_rating_provider`.
+RatingProvider = Callable[[str], Awaitable[Optional[int]]]
 
 
 def parse_pool(pool: str) -> TimeControl:
@@ -46,12 +50,16 @@ class AmbientSupervisor:
         *,
         n: int,
         time_controls: Sequence[TimeControl],
+        rating_provider: "Optional[RatingProvider]" = None,
     ) -> None:
         self._registry = registry
         self._launcher = launcher
         self._house_a = house_a
         self._house_b = house_b
         self._n = n
+        # Optional per-launch rating refresh (KAN-207). None → use the house bot
+        # object's static rating (the fast/test default, no DB).
+        self._rating_provider = rating_provider
         # KAN-57: round-robin a rotation of time controls across the `n` slots, so
         # the lobby shows a mix (e.g. 3+0, bullet 1+0, 2+1 increment) rather than a
         # single control. `_spawn_count` advances on every spawn AND refill, so the
@@ -94,14 +102,31 @@ class AmbientSupervisor:
     async def _spawn_one(self) -> None:
         tc = self._tcs[self._spawn_count % len(self._tcs)]
         self._spawn_count += 1
+        white_info, black_info = await self._game_infos()
         game = self._registry.create_game(
-            white=Participant(bot=self._house_a.info, is_house=True, house=self._house_a),
-            black=Participant(bot=self._house_b.info, is_house=True, house=self._house_b),
+            white=Participant(bot=white_info, is_house=True, house=self._house_a),
+            black=Participant(bot=black_info, is_house=True, house=self._house_b),
             time_control=tc,
         )
         task = await self._launcher.launch(game)  # returns the run_game task
         self._live[task] = game.id
         task.add_done_callback(self._on_finished)
+
+    async def _game_infos(self) -> "tuple[BotInfo, BotInfo]":
+        """The two house identities for a fresh game. With a rating_provider
+        (production), refresh each side's rating from the DB so the live lobby view
+        matches the persisted (finalizer-updated) rating instead of the static boot
+        value (KAN-207); without one, use the house objects' own info unchanged."""
+        a, b = self._house_a.info, self._house_b.info
+        if self._rating_provider is None:
+            return a, b
+        ra = await self._rating_provider(a.id)
+        rb = await self._rating_provider(b.id)
+        if ra is not None:
+            a = a.model_copy(update={"rating": ra})
+        if rb is not None:
+            b = b.model_copy(update={"rating": rb})
+        return a, b
 
     def _on_finished(self, task: asyncio.Task) -> None:
         game_id = self._live.pop(task, None)
