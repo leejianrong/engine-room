@@ -24,6 +24,23 @@ services:
       timeout: 3s
       retries: 10
 
+  # KAN-62: broker for the cross-worker spectator SSE fan-out. Only started with the
+  # app/demo profiles (the default `docker compose up -d db` dev flow is unchanged).
+  # Set ER_REDIS_URL on any backend you run against this to fan SSE events across
+  # workers/processes; unset, the backend uses its in-process bus exactly as before.
+  redis:
+    image: redis:7
+    profiles: ["app", "demo"]
+    ports:
+      # Host 6379 so a second backend run on the host (the two-container fan-out
+      # test) can share this broker.
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   backend:
     profiles: ["app", "demo"]
     # Repo-root context (V8): server/Dockerfile builds the SPA into the image, so it
@@ -35,8 +52,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       ER_DATABASE_URL: postgresql+asyncpg://engine_room:engine_room@db:5432/engine_room
+      # KAN-62: fan spectator SSE events through Redis so multiple workers/processes
+      # share them (proves cross-process fan-out under the app/demo profiles).
+      ER_REDIS_URL: redis://redis:6379/0
       # CORS default already allows http://localhost:5174 (the frontend origin).
       # Pace the house bot's replies so demo games are watchable move-by-move
       # (local only; production leaves this at the default 0 = instant).
