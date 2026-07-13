@@ -92,6 +92,12 @@ middleware + `config.py cors_allow_origins` are kept (harmless) only for hosting
   with the Co-Authored-By trailer. (Branch **protection** on `main` needs GitHub Pro / a public
   repo — not yet enforced server-side on this private free repo; the discipline is followed by
   convention. See docs/WORKFLOW-ADOPTION.md.)
+- **Land policy — merge on green CI.** A PR may be merged once **all CI checks are green** (the
+  6 `ci.yml` jobs — lint, unit, sdk, integration, frontend, e2e — plus the `gitleaks` scan, and the
+  docs `build` check on docs PRs) and the diff has been reviewed. Use a **merge commit**
+  (`gh pr merge <n> --merge --delete-branch`), not squash. Don't merge on red or pending; a card
+  with a DB migration lands alone (+ prod-verify once prod exists). This applies to Dependabot PRs
+  too — green CI + a diff review is the bar.
 - **Pre-push hook** mirrors the fast CI jobs (ruff + `pytest tests/unit` + `npm run check`).
   `git push --no-verify` bypasses it for a one-off.
 - Prefer Claude Code `isolation: "worktree"` for parallel file-mutating agent work.
