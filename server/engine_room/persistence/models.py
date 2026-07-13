@@ -13,6 +13,7 @@ from fastapi_users_db_sqlalchemy import (
     SQLAlchemyBaseOAuthAccountTableUUID,
     SQLAlchemyBaseUserTableUUID,
 )
+from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import GUID
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -39,6 +40,15 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", lazy="joined"
     )
+
+
+class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
+    """Server-side human session token (KAN-72). Backs the `DatabaseStrategy`:
+    a row per live `er_session` cookie, so logout (and future admin revocation)
+    deletes the row and kills the session *instantly* — unlike the old stateless
+    JWT, which could not be revoked before expiry. The mixin supplies `token`
+    (PK), `created_at`, and the `user_id` FK → `user.id`; table name `accesstoken`.
+    """
 
 
 class Bot(Base):

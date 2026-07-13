@@ -33,8 +33,9 @@ def test_migrations_apply_cleanly_on_fresh_db():
         finally:
             engine.dispose()
 
-    # V1 + V2 identity tables all present after a clean upgrade to head.
-    assert {"games", "user", "oauth_account", "bots"} <= tables
+    # V1 + V2 identity tables all present after a clean upgrade to head, plus the
+    # KAN-72 revocable-session token table (migration 0006).
+    assert {"games", "user", "oauth_account", "bots", "accesstoken"} <= tables
     # games gained the bot FKs (D-f) and the house bot is seeded (ADR-0022).
     assert {"white_bot_id", "black_bot_id"} <= games_cols
     assert house is not None and house[1] is True
