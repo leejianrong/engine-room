@@ -5,6 +5,7 @@ clock, so every time-driven rule (widening, TTL, greeter solo-wait) is exact."""
 
 import pytest
 
+from engine_room.game.game import Participant
 from engine_room.game.house_bots import EPHRAIM_ID, RandomBot
 from engine_room.game.registry import GameRegistry
 from engine_room.matchmaking.elo import Windowing
@@ -186,6 +187,97 @@ async def test_soft_anti_rematch_prefers_a_fresh_opponent():
     ids = {(g.white.bot.id, g.black.bot.id) for g in launcher.launched}
     paired = {frozenset(p) for p in ids}
     assert frozenset({"bot_a", "bot_b"}) not in paired
+
+
+# --- KAN-55 direct challenges -------------------------------------------------
+
+
+def _track(sreg, bot):
+    """Register a bot's live session (online) without enrolling a seek ticket."""
+    return sreg.track(FakeSession(bot))
+
+
+async def _challenge(mm, session, opponent_bot_id, tc=TC_3):
+    return await mm.seek(session, tc, opponent_bot_id=opponent_bot_id)
+
+
+async def test_direct_challenge_pairs_named_bot():
+    mm, sreg, launcher, clock = _make()
+    a = _track(sreg, _bot("bot_a", 1200, "uA"))
+    _track(sreg, _bot("bot_b", 1800, "uB"))  # far rating — anon would not pair now
+    result = await _challenge(mm, a, "bot_b")
+    assert result.error is None
+    assert result.status == "paired"
+    game = result.game
+    assert game is not None
+    assert game.white.bot.id == "bot_a"  # challenger (initiator) takes White
+    assert game.black.bot.id == "bot_b"
+    # seek() itself does not launch — the endpoint launches result.game.
+    assert launcher.launched == []
+
+
+async def test_direct_challenge_vs_house_bot_allowed():
+    mm, sreg, launcher, clock = _make()
+    a = _track(sreg, _bot("bot_a", 1200, "uA"))
+    _track(sreg, _bot("house_1", 1200, owner=None))  # house: owner None, exempt
+    result = await _challenge(mm, a, "house_1")
+    assert result.error is None and result.game is not None
+
+
+async def test_direct_challenge_self_is_rejected():
+    mm, sreg, launcher, clock = _make()
+    a = _track(sreg, _bot("bot_a", 1200, "uA"))
+    result = await _challenge(mm, a, "bot_a")
+    assert result.game is None
+    assert result.error is not None and result.error.code == "INVALID_CHALLENGE"
+
+
+async def test_direct_challenge_offline_target_is_rejected():
+    mm, sreg, launcher, clock = _make()
+    a = _track(sreg, _bot("bot_a", 1200, "uA"))
+    result = await _challenge(mm, a, "bot_ghost")
+    assert result.game is None
+    assert result.error is not None and result.error.code == "OPPONENT_UNAVAILABLE"
+
+
+async def test_direct_challenge_same_owner_is_rejected():
+    mm, sreg, launcher, clock = _make()
+    a = _track(sreg, _bot("bot_a", 1200, "uX"))
+    _track(sreg, _bot("bot_b", 1200, "uX"))  # same owner
+    result = await _challenge(mm, a, "bot_b")
+    assert result.game is None
+    assert result.error is not None and result.error.code == "INVALID_CHALLENGE"
+
+
+async def test_direct_challenge_busy_target_is_rejected():
+    mm, sreg, launcher, clock = _make()
+    a = _track(sreg, _bot("bot_a", 1200, "uA"))
+    b = _track(sreg, _bot("bot_b", 1200, "uB"))
+    # Put B in a live game (bound in the active-game index).
+    game = mm._registry.create_game(
+        white=Participant(bot=b.bot, session=b),
+        black=Participant(bot=_bot("house_1", 1200, owner=None), is_house=True),
+        time_control=TC_3,
+    )
+    mm._registry.bind_active(game)
+    result = await _challenge(mm, a, "bot_b")
+    assert result.game is None
+    assert result.error is not None and result.error.code == "OPPONENT_UNAVAILABLE"
+
+
+async def test_direct_challenge_drops_targets_waiting_ticket():
+    mm, sreg, launcher, clock = _make()
+    a = _track(sreg, _bot("bot_a", 1200, "uA"))
+    # B is waiting in the anonymous queue; a direct challenge pulls it out so the
+    # background matcher can't also pair it elsewhere.
+    _, b_seek = await _seek(mm, sreg, _bot("bot_b", 1200, "uB"), TC_3)
+    result = await _challenge(mm, a, "bot_b")
+    assert result.error is None and result.game is not None
+    assert b_seek not in mm._by_seek
+    assert all(t.bot_id != "bot_b" for pool in mm._pools.values() for t in pool)
+    # A later tick must not re-pair B (its ticket is gone).
+    await mm.tick()
+    assert launcher.launched == []
 
 
 if __name__ == "__main__":  # pragma: no cover

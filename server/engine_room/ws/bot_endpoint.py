@@ -210,11 +210,22 @@ async def bot_ws(websocket: WebSocket) -> None:
                 continue
 
             if isinstance(msg, Seek):
-                result = await queue.seek(session, msg.time_control)
-                await session.send(SeekAck(id=msg.id, seek_id=result.seek_id, status="queued"))
+                result = await queue.seek(
+                    session, msg.time_control, opponent_bot_id=msg.opponent_bot_id
+                )
+                if result.error is not None:
+                    # A rejected direct challenge (KAN-55): report and keep the
+                    # connection open so the bot can seek again (non-fatal).
+                    await session.send(
+                        Error(code=result.error.code, message=result.error.message)
+                    )
+                    continue
+                await session.send(
+                    SeekAck(id=msg.id, seek_id=result.seek_id, status=result.status)
+                )
                 # Async matcher path (V3): game_start arrives later, via the
-                # launcher. The always-pair path returns an inline game whose
-                # launch we drive here (kept working until sub-step 4 swaps it).
+                # launcher. The always-pair and direct-challenge (KAN-55) paths
+                # return an inline game whose launch we drive here.
                 if result.game is not None:
                     await websocket.app.state.game_launcher.launch(result.game)
             elif isinstance(msg, SeekCancel):

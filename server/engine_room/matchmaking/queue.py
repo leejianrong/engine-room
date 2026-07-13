@@ -23,15 +23,34 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class SeekError:
+    """A seek that cannot be honored (KAN-55 direct challenge). Surfaced by the
+    endpoint as an `error` frame instead of a `seek_ack`; the connection stays
+    open. `code` is a PROTOCOL.md §11 code."""
+
+    code: str
+    message: str = ""
+
+
+@dataclass
 class PairResult:
-    """Outcome of a seek: always a seek_id; a game if pairing happened now."""
+    """Outcome of a seek: always a seek_id; a game if pairing happened now
+    (synchronous direct-challenge / always-pair paths); an `error` if a targeted
+    challenge was rejected. `status` is echoed on the `seek_ack`."""
 
     seek_id: str
     game: Optional["Game"] = None
+    status: str = "queued"
+    error: Optional[SeekError] = None
 
 
 class MatchmakingQueue(Protocol):
-    async def seek(self, session: "Session", time_control: TimeControl) -> PairResult:
+    async def seek(
+        self,
+        session: "Session",
+        time_control: TimeControl,
+        opponent_bot_id: Optional[str] = None,
+    ) -> PairResult:
         ...
 
     async def cancel(self, seek_id: str) -> None:
@@ -51,8 +70,14 @@ class AlwaysPairQueue:
         self._registry = registry
         self._house = house
 
-    async def seek(self, session: "Session", time_control: TimeControl) -> PairResult:
-        # V1: the seeking bot takes White; the house bot takes Black.
+    async def seek(
+        self,
+        session: "Session",
+        time_control: TimeControl,
+        opponent_bot_id: Optional[str] = None,
+    ) -> PairResult:
+        # V1: the seeking bot takes White; the house bot takes Black. Direct
+        # challenges (opponent_bot_id) are a V3+ matcher feature — ignored here.
         game = self._registry.create_game(
             white=Participant(bot=session.bot, session=session),
             black=Participant(bot=self._house.info, is_house=True, house=self._house),

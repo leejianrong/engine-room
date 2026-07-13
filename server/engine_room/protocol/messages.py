@@ -46,6 +46,11 @@ class Seek(BaseModel):
     type: Literal["seek"]
     time_control: TimeControl
     id: Optional[str] = None  # client correlation id, echoed on the ack
+    # KAN-55 direct challenge: when set, pair *directly* against this specific bot
+    # (a named opponent / friend) instead of anonymous Elo matchmaking. Absent =
+    # the normal widening-window queue. The target must be online and idle; the
+    # challenger sets the time control. See PROTOCOL.md §5.
+    opponent_bot_id: Optional[str] = None
 
 
 class SeekCancel(BaseModel):
