@@ -1,0 +1,71 @@
+# Dependabot config (KAN-169) — automated dependency version-update PRs
+# that flow through the existing CI gate. Lockfiles are committed and installed
+# --frozen, so these PRs bump both manifests and lockfiles together.
+#
+# NOTE: This file only drives *version-update* PRs. The "scanned" half of the
+# audit gap — Dependabot **security updates** + **vulnerability alerts** — is a
+# one-time repo toggle under Settings → Code security (free). Enable both to
+# complete the cadence-plus-advisories story.
+#
+# `uv` is a natively supported package-ecosystem (not `pip`) for uv-lock
+# Python projects. Source: GitHub docs, "Dependabot options reference"
+# (package-ecosystem support list). One `updates:` entry per ecosystem+dir.
+version: 2
+
+updates:
+  # ── Python (uv) ──────────────────────────────────────────────────────────
+  - package-ecosystem: "uv"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      server-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "uv"
+    directory: "/sdk/engineroom"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      sdk-engineroom-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "uv"
+    directory: "/sdk/quickstart"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      sdk-quickstart-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── Frontend (npm) ───────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ── CI/CD (GitHub Actions) ───────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
