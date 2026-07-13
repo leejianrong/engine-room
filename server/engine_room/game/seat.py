@@ -202,7 +202,13 @@ class HouseSeat:
         # is charged to the house's own clock.
         if self.delay:
             await asyncio.sleep(self.delay)
-        return self.house.choose_move(board)
+        # choose_move is synchronous CPU-bound work (depth-N minimax). Run it off
+        # the event loop in a worker thread — otherwise a search freezes the whole
+        # loop (incl. /health), which flaps the deploy health check on small VMs
+        # (KAN-203). Safe to offload: choose_move leaves the board unmutated
+        # (symmetric push/pop) and no other coroutine touches this game's board
+        # while request_move is awaited.
+        return await asyncio.to_thread(self.house.choose_move, board)
 
     async def confirm_move(self, ply: int) -> None:
         return None
