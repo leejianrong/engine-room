@@ -1,0 +1,11 @@
+# CODEOWNERS — route PR reviews to the repo owner.
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+# Last matching pattern wins, so put the more specific patterns below the catch-all.
+
+# Catch-all: everything is owned by the maintainer.
+*                               @leejianrong
+
+# Security-sensitive areas (API-key + OAuth auth, bot credentials, CI/governance).
+/server/engine_room/auth/       @leejianrong
+/server/engine_room/bots/       @leejianrong
+/.github/                       @leejianrong
