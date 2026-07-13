@@ -110,6 +110,16 @@ class Settings(BaseSettings):
     # ER_STATIC_DIR to it.
     static_dir: str = ""
 
+    # --- KAN-63 observability (first slice) ---
+    # Root log level and whether logs are emitted as one JSON object per line
+    # (structured, request_id/game_id threaded) vs a plain human line. JSON is the
+    # prod default; flip ER_LOG_JSON=false locally for readable `--reload` output.
+    log_level: str = "INFO"
+    log_json: bool = True
+    # Expose the Prometheus `/metrics` endpoint (text exposition). Unauthenticated
+    # for now — locking it down / an admin view is the deferred KAN-63 follow-up.
+    metrics_enabled: bool = True
+
     # --- V3 matchmaking (slice A3, ADR-0011/0012/0016 E8) ---
     # Elo widening window: half-width starts at ±`mm_window_start`, grows by
     # `mm_window_step` every `mm_window_step_seconds`, and is uncapped (∞ — pair

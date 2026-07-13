@@ -41,6 +41,7 @@ from .matchmaking.elo import Windowing
 from .matchmaking.launcher import GameLauncher
 from .matchmaking.matcher import EloMatchmaker
 from .matchmaking.queue import AlwaysPairQueue
+from .observability import RequestIdMiddleware, render_metrics, setup_logging
 from .persistence.finalize import PostgresFinalizer
 from .persistence.reader import PostgresGameReader
 from .pubsub.inproc import InProcPubSub
@@ -183,6 +184,11 @@ def create_app(
     `spec -> crbk_ key` provisioner (None → mint keys against the DB house rows —
     tests inject a DB-free provider returning known fake keys).
     """
+    # Structured JSON logging + request/game-id context (KAN-63). Idempotent, so
+    # safe under the many create_app() calls tests make. Configures the root logger
+    # so the existing getLogger(__name__) call sites gain JSON output for free.
+    setup_logging(level=settings.log_level, json_enabled=settings.log_json)
+
     app = FastAPI(title="Engine Room", version=__version__, lifespan=_lifespan)
 
     # Allow the SvelteKit dev server (and configured origins) to call the API,
@@ -193,6 +199,10 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Request id per HTTP request (accept inbound X-Request-ID, else mint one),
+    # bound into the log context + echoed on the response. Added after CORS so it
+    # wraps outermost — the id is bound before anything else runs (KAN-63).
+    app.add_middleware(RequestIdMiddleware)
 
     # Single-process MVP state (ADR-0020); matchmaking + pubsub sit behind their
     # interfaces (R6) so Redis-backed impls swap in at scale-out.
@@ -297,6 +307,15 @@ def create_app(
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    # Prometheus text exposition (KAN-63). Registered BEFORE the SPA catch-all
+    # mount so it isn't swallowed by the client-routing fallback. Unauthenticated
+    # for now (locking it down + an admin view are the deferred follow-ups).
+    if settings.metrics_enabled:
+
+        @app.get("/metrics")
+        async def metrics():
+            return render_metrics()
 
     app.include_router(bot_router)
     app.include_router(spectate_router)
