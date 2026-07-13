@@ -65,6 +65,7 @@ open WS (Authorization: Bearer <key>)
   "time_control": { "base_seconds": 180, "increment_seconds": 0 } }
 ```
 - `time_control` selects the pool (3+0 → `{180,0}`, 5+0 → `{300,0}`). The bot chooses its time control here (C7).
+- **Direct challenge (KAN-55, optional):** add `"opponent_bot_id": "bot_123"` to challenge one specific bot (a named opponent / friend) instead of anonymous Elo matchmaking. The challenge is resolved **synchronously**: the target must be **online and not already in a game**, and must not be one of your own bots (same-owner exclusion, ADR-0016 H5; house bots are exempt). On success the challenger takes **White** and both bots receive `game_start` immediately (the target need not have an outstanding seek; the challenger's `time_control` governs). On failure the server replies with a non-fatal `error` (`OPPONENT_UNAVAILABLE` / `INVALID_CHALLENGE`, §11) instead of a `seek_ack`, and the connection stays open. Absent the field, the normal widening-window queue is used.
 
 ### `seek_ack` (server → client)
 ```json
@@ -223,6 +224,8 @@ This lets an SDK safely "send, and resend on missing ack / after reconnect" with
 | `NOT_YOUR_TURN` | move sent when not to move | no |
 | `INVALID_PLY` | move ply ≠ expected (§9) | no |
 | `NO_ACTIVE_GAME` | game-scoped message with no such game | no |
+| `OPPONENT_UNAVAILABLE` | direct challenge (§5): target bot is offline or already in a game | no |
+| `INVALID_CHALLENGE` | direct challenge (§5): self-challenge, your own bot (same-owner), or you are already in a game | no |
 
 ---
 

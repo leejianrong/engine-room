@@ -148,6 +148,20 @@ export function toPgn(g: GameView): string {
 	return `${headers}\n\n${body.trim()}\n`;
 }
 
+// ── Direct challenge (KAN-55) ─────────────────────────────────────────────────
+// Challenges are issued by a *bot* over the WebSocket, not by the browser: a bot
+// seeks with `opponent_bot_id` set to the target's id (PROTOCOL §5). The SPA's
+// role is to help a user aim their bot — this copies the target bot's id so it can
+// be pasted into a targeted seek. Returns true if the clipboard write succeeded.
+export async function copyChallengeTarget(botId: string): Promise<boolean> {
+	try {
+		await navigator.clipboard.writeText(botId);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export function fmtClock(ms: number): string {
 	const s = Math.max(0, Math.floor(ms / 1000));
 	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

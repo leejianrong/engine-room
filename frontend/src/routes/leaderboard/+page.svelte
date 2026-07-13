@@ -1,10 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchLeaderboard, type LeaderboardEntry } from '$lib/api';
+	import { copyChallengeTarget, fetchLeaderboard, type LeaderboardEntry } from '$lib/api';
 
 	let entries = $state<LeaderboardEntry[]>([]);
 	let error = $state('');
 	let loaded = $state(false);
+	let copiedId = $state<string | null>(null);
+
+	// Direct challenge (KAN-55): the browser can't open a bot's authenticated
+	// WebSocket, so "Challenge" copies the target's id — paste it into your bot's
+	// targeted seek (`opponent_bot_id`, PROTOCOL §5) to play this bot directly.
+	async function challenge(botId: string) {
+		if (await copyChallengeTarget(botId)) {
+			copiedId = botId;
+			setTimeout(() => (copiedId === botId ? (copiedId = null) : null), 1500);
+		}
+	}
 
 	async function load() {
 		try {
@@ -43,6 +54,7 @@
 					<th>Bot</th>
 					<th class="num">Rating</th>
 					<th class="num">Games</th>
+					<th class="act"></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -55,6 +67,15 @@
 						</td>
 						<td class="num rating">{e.rating}</td>
 						<td class="num games">{e.games_played}</td>
+						<td class="act">
+							<button
+								class="challenge"
+								title="Copy this bot's id to challenge it directly — point your bot at it with a targeted seek (opponent_bot_id)."
+								onclick={() => challenge(e.bot_id)}
+							>
+								{copiedId === e.bot_id ? 'Copied id ✓' : 'Challenge'}
+							</button>
+						</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -142,6 +163,25 @@
 	}
 	.games {
 		color: #888;
+	}
+	td.act,
+	th.act {
+		text-align: right;
+		width: 7rem;
+	}
+	.challenge {
+		font: inherit;
+		font-size: 0.75rem;
+		cursor: pointer;
+		color: #779556;
+		background: transparent;
+		border: 1px solid #779556;
+		border-radius: 4px;
+		padding: 0.15rem 0.5rem;
+		white-space: nowrap;
+	}
+	.challenge:hover {
+		background: #77955618;
 	}
 	.empty,
 	.error {

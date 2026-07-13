@@ -31,7 +31,7 @@ from ..ids import new_id
 from ..protocol.messages import SeekEnded, TimeControl
 from .elo import Windowing
 from .pool import best_opponent
-from .queue import PairResult
+from .queue import PairResult, SeekError
 from .ticket import Ticket, tc_key
 
 if TYPE_CHECKING:
@@ -79,7 +79,16 @@ class EloMatchmaker:
 
     # --- MatchmakingQueue interface ------------------------------------------
 
-    async def seek(self, session: "Session", time_control: TimeControl) -> PairResult:
+    async def seek(
+        self,
+        session: "Session",
+        time_control: TimeControl,
+        opponent_bot_id: Optional[str] = None,
+    ) -> PairResult:
+        if opponent_bot_id is not None:
+            # KAN-55: a direct challenge is paired *synchronously* against the
+            # named bot (or rejected) — it never enrolls a queue ticket / TTL.
+            return await self._direct_challenge(session, time_control, opponent_bot_id)
         key = tc_key(time_control)
         seek_id = new_id("seek")
         ticket = Ticket(
@@ -195,6 +204,60 @@ class EloMatchmaker:
             if now - t.enqueued_at >= self._greeter_wait:
                 await self._start_greeter(t)
                 self._drop(t)
+
+    # --- direct challenge (KAN-55) -------------------------------------------
+
+    async def _direct_challenge(
+        self, session: "Session", time_control: TimeControl, opponent_bot_id: str
+    ) -> PairResult:
+        """Pair the seeker directly against a named bot, bypassing Elo/window
+        matchmaking. Immediate: either a game (challenger = White, the initiator)
+        or a rejection. Edge cases mirror the anonymous rules (same-owner
+        exclusion H5; house bots — owner None — are exempt)."""
+        seek_id = new_id("seek")
+        challenger = session.bot
+
+        def rejected(code: str, message: str) -> PairResult:
+            return PairResult(seek_id=seek_id, error=SeekError(code=code, message=message))
+
+        if opponent_bot_id == challenger.id:
+            return rejected("INVALID_CHALLENGE", "cannot challenge yourself")
+        if self._registry.active_game_for(challenger.id) is not None:
+            return rejected("INVALID_CHALLENGE", "you are already in a game")
+
+        target_session = self._session_registry.current(opponent_bot_id)
+        if target_session is None:
+            return rejected("OPPONENT_UNAVAILABLE", "opponent is not online")
+        target = target_session.bot
+        # Same-owner exclusion (H5): never pit two bots owned by the same user
+        # against each other — rated self-play would farm Elo. House bots
+        # (owner_id None) are exempt, so a house bot is always challengeable.
+        if challenger.owner_id is not None and challenger.owner_id == target.owner_id:
+            return rejected("INVALID_CHALLENGE", "cannot challenge your own bot")
+        if self._registry.active_game_for(opponent_bot_id) is not None:
+            return rejected("OPPONENT_UNAVAILABLE", "opponent is already in a game")
+
+        # Drop any waiting queue tickets for either bot so the background matcher
+        # can't also pair them elsewhere; the target gets game_start (a paired
+        # ticket never receives seek_ended).
+        self._drop_by_bot(challenger.id)
+        self._drop_by_bot(opponent_bot_id)
+
+        game = self._registry.create_game(
+            white=Participant(bot=challenger, session=session),
+            black=Participant(bot=target, session=target_session),
+            time_control=time_control,
+        )
+        self._last_opponent[challenger.id] = opponent_bot_id  # soft anti-rematch (E5)
+        self._last_opponent[opponent_bot_id] = challenger.id
+        return PairResult(seek_id=seek_id, game=game, status="paired")
+
+    def _drop_by_bot(self, bot_id: str) -> None:
+        """Remove every waiting ticket belonging to `bot_id` from all pools."""
+        for pool in self._pools.values():
+            for t in list(pool):
+                if t.bot_id == bot_id:
+                    self._drop(t)
 
     # --- game creation -------------------------------------------------------
 
