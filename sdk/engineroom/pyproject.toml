@@ -22,7 +22,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "websockets>=13",
+    "websockets>=16.1",
     "chess>=1.11",
 ]
 
