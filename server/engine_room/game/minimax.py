@@ -1,10 +1,9 @@
 """A small minimax + alpha-beta move engine (material + piece-square eval).
 
 A pure `choose_move(board) -> uci` — the same interface `RandomBot` exposes — so
-it drops into the existing seat/house machinery. Used now by the dev demo client
-(`devtools.demo_bot`) so demo games look like real chess; the future
-`house-minimax` reference bot (ADR-0022, V6) can reuse it. Not wired into
-`create_app` today.
+it drops into the existing seat/house machinery. It is the engine behind the
+ambient lobby residents `jian-bot-001/002` (`MinimaxBot` in `house_bots.py`), so
+house-vs-house lobby games look like real chess; the dev demo client reuses it too.
 
 Depth 3 with capture-first ordering is ~0.1-0.3s/move in pure Python — sensible,
 non-blundering play without lagging a 3+0 clock. Piece-square tables are the
@@ -19,6 +18,11 @@ import chess
 
 MATE = 1_000_000
 INF = 10_000_000
+# Contempt (centipawns): how much the bot dislikes steering into a draw. Small on
+# purpose — an equal-or-better bot avoids sterile repetition/fifty-move shuffling
+# (which was making lobby games peter out into threefold), but a *losing* bot
+# still grabs the saving draw, since a drawn line at -CONTEMPT beats a lost one.
+CONTEMPT = 40
 
 # Centipawn material values (king has no material value — mate is scored separately).
 PIECE_VALUES = {
@@ -163,7 +167,16 @@ def choose_move(board: chess.Board, depth: int = 3, rng: random.Random | None = 
     best_moves: list[chess.Move] = []
     for move in moves:
         board.push(move)
-        val = -_search(board, depth - 1, -INF, INF)
+        # A move that forces a draw the server will auto-claim (threefold or the
+        # fifty-move rule) ends the game *here*, so value it as the draw itself —
+        # nudged by contempt to -CONTEMPT — instead of by the material on the board.
+        # A winning bot then shuns the draw (a real edge beats -CONTEMPT); a losing
+        # bot still grabs it (-CONTEMPT beats a lost line). This is why lobby games
+        # stopped petering out into threefold. Root-only, so it stays cheap.
+        if board.is_repetition(3) or board.halfmove_clock >= 100:
+            val = -CONTEMPT
+        else:
+            val = -_search(board, depth - 1, -INF, INF)
         board.pop()
         if val > best_val:
             best_val, best_moves = val, [move]
