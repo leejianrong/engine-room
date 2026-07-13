@@ -27,7 +27,7 @@ dev = [
     "websockets>=16.1",  # real-server SSE/e2e tests
     "ruff>=0.15.21",  # lint + import sort
     "testcontainers[redis]>=4",  # ephemeral Postgres + Redis for integration tests
-    "psycopg[binary]>=3.2",  # sync driver for testcontainers' readiness check
+    "psycopg[binary]>=3.3.4",  # sync driver for testcontainers' readiness check
 ]
 
 [tool.ruff]
