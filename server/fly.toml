@@ -23,7 +23,7 @@ app = "engine-room"
 primary_region = "sin"
 
 [build]
-  dockerfile = "server/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [http_service]
   internal_port = 8001          # matches the Dockerfile CMD (uvicorn --port 8001)
