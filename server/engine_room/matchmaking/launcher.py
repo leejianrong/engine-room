@@ -12,11 +12,20 @@ Injected via `create_app`/`app.state`, mirroring the finalizer DI.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING, Optional
 
 from ..game.game import Game
 from ..game.worker import prepare_game, run_game
+from ..observability import (
+    bind_game_id,
+    record_game_finished,
+    record_game_started,
+    reset_game_id,
+)
 from ..protocol.messages import Clocks, GameStart
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ..game.registry import GameRegistry
@@ -65,21 +74,46 @@ class GameLauncher:
         opening already finds a bound seat. `game_start` is sent (and awaited)
         before the task is created, so a bot always sees `game_start` before its
         first `your_turn` (§5). House seats have no session and are skipped."""
-        prepare_game(game, self._house_move_delay)
-        if self._registry is not None:
-            self._registry.bind_active(game)
-        for participant, color in ((game.white, "white"), (game.black, "black")):
-            if participant.session is not None:
-                await participant.session.send(game_start_for(game, color))
-        task = asyncio.create_task(
-            run_game(
-                game,
-                self._pubsub,
-                self._finalizer,
-                self._house_move_delay,
-                registry=self._registry,
+        # Bind game_id into the log context for the launch AND the run_game task:
+        # create_task copies the current context, so the loop inherits the id
+        # without threading it through call sites (KAN-63). Reset once the task is
+        # spawned so the id doesn't leak back to the matcher/ambient caller.
+        token = bind_game_id(game.id)
+        try:
+            prepare_game(game, self._house_move_delay)
+            if self._registry is not None:
+                self._registry.bind_active(game)
+            logger.info(
+                "launching game",
+                extra={
+                    "white": game.white.bot.name,
+                    "black": game.black.bot.name,
+                    "time_control": (
+                        f"{game.time_control.base_seconds}+"
+                        f"{game.time_control.increment_seconds}"
+                    ),
+                },
             )
-        )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-        return task
+            for participant, color in ((game.white, "white"), (game.black, "black")):
+                if participant.session is not None:
+                    await participant.session.send(game_start_for(game, color))
+            task = asyncio.create_task(
+                run_game(
+                    game,
+                    self._pubsub,
+                    self._finalizer,
+                    self._house_move_delay,
+                    registry=self._registry,
+                )
+            )
+            record_game_started()
+            self._tasks.add(task)
+
+            def _done(t: "asyncio.Task") -> None:
+                self._tasks.discard(t)
+                record_game_finished()
+
+            task.add_done_callback(_done)
+            return task
+        finally:
+            reset_game_id(token)
