@@ -59,8 +59,11 @@ if you additionally host the frontend on a separate origin (JSON list of origins
 
 ## 4. First deploy (manual)
 Deploy **from the repo root** (not `cd server`): the image bakes the SPA in, so the
-Docker build context must include `frontend/`. `server/fly.toml` points at
-`server/Dockerfile`.
+Docker build context must include `frontend/`. `server/fly.toml`'s `[build] dockerfile`
+is `Dockerfile` — flyctl resolves that path relative to the **config file's own
+directory** (`server/`), giving `server/Dockerfile`, while the build context stays the
+repo root. (Do **not** write `server/Dockerfile` in the toml: flyctl would resolve it to
+`server/server/Dockerfile` and the build fails.)
 ```bash
 # from the repo root
 fly deploy --remote-only --config server/fly.toml
