@@ -49,6 +49,8 @@ from .pubsub.redis import RedisPubSub
 from .spectate.games import router as games_router
 from .spectate.leaderboard import leaderboard_router
 from .spectate.sse import router as spectate_router
+from .tournaments.manager import TournamentManager
+from .tournaments.routes import router as tournaments_router
 from .ws.bot_endpoint import router as bot_router
 from .ws.session_registry import SessionRegistry
 
@@ -96,6 +98,9 @@ async def _lifespan(app: FastAPI):
         await app.state.pubsub.start()
     # Start/stop the background matchmaker loop (V3). No-op for AlwaysPairQueue.
     await app.state.matchmaking_queue.start()
+    # Start/stop the tournament manager (KAN-56). Event-driven (start() is a no-op
+    # at rest); stop() cancels any in-flight tournament run tasks on shutdown.
+    await app.state.tournament_manager.start()
     # Start/stop the ambient house-vs-house feeder (V6). None when disabled.
     if app.state.ambient_supervisor is not None:
         await app.state.ambient_supervisor.start()
@@ -111,6 +116,7 @@ async def _lifespan(app: FastAPI):
             await app.state.house_client_supervisor.stop()
         if app.state.ambient_supervisor is not None:
             await app.state.ambient_supervisor.stop()
+        await app.state.tournament_manager.stop()
         await app.state.matchmaking_queue.stop()
         if hasattr(app.state.pubsub, "stop"):
             await app.state.pubsub.stop()
@@ -155,6 +161,7 @@ def create_app(
     house_bot_ws_url: str | None = None,
     house_bot_specs=None,
     house_bot_key_provider=None,
+    tournament_session_factory=None,
 ) -> FastAPI:
     """Application factory.
 
@@ -317,6 +324,20 @@ def create_app(
     else:
         app.state.matchmaking_queue = _default_matcher(app, matcher_kwargs)
 
+    # KAN-56 tournaments: enrollment (via a tournament-tagged seek) + running a
+    # round-robin over the shared GameLauncher, standings persisted. Single-process
+    # / in-memory-orchestrated like the matcher. Its DB writes use SessionLocal by
+    # default; tests inject a container-bound factory (mirrors the finalizer DI).
+    tm_kwargs = {}
+    if tournament_session_factory is not None:
+        tm_kwargs["session_factory"] = tournament_session_factory
+    app.state.tournament_manager = TournamentManager(
+        app.state.game_registry,
+        app.state.session_registry,
+        app.state.game_launcher,
+        **tm_kwargs,
+    )
+
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -356,6 +377,7 @@ def create_app(
         tags=["users"],
     )
     app.include_router(bots_router)
+    app.include_router(tournaments_router)
 
     # Same-origin SPA (V8, KAN-68): mount the built SvelteKit app LAST so its
     # client-routing catch-all never shadows the API/WS/SSE routes or /docs above.
