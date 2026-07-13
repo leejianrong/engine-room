@@ -105,6 +105,23 @@ def make_db_key_provider(session_factory=SessionLocal) -> KeyProvider:
     return _provider
 
 
+def make_db_rating_provider(session_factory=SessionLocal):
+    """Return an async `(bot_id) -> int | None` that reads a bot's *current*
+    persisted rating from Postgres. Used by the in-process `AmbientSupervisor`
+    (KAN-207): the house bot objects are built once at boot with a static rating,
+    so without this the lobby shows their rating frozen at the seed value while the
+    finalizer keeps moving `bots.rating` after every game. Refreshing per game
+    launch makes the live view agree with the profile page. `None` (row missing)
+    leaves the caller's fallback rating in place."""
+
+    async def _provider(bot_id: str) -> "int | None":
+        async with session_factory() as session:
+            bot = await session.get(Bot, bot_id)
+            return None if bot is None else bot.rating
+
+    return _provider
+
+
 class HouseBotClientSupervisor:
     """Launches + supervises the out-of-process house-bot SDK clients.
 
