@@ -1,0 +1,52 @@
+# Gitleaks configuration for engine-room (KAN-168).
+#
+# Extends the upstream default ruleset (`useDefault = true`) and adds one rule for
+# THIS platform's own credential: the per-bot API key `crbk_<43 base62>` (ADR-0014).
+# gitleaks ships no rule for our custom prefix, so without this a real leaked bot
+# key would sail through CI. The rule matches only the real, high-entropy format;
+# the documented example/test placeholders (which share the prefix but are short,
+# low-entropy, or literal) are allowlisted below so CI stays green on the tree.
+#
+# Kanban PAT lives only in `.mcp.json`, which is gitignored and never committed, so
+# it needs no allowlist. `ER_*` secrets are only ever referenced by name here.
+
+title = "engine-room gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "chessroom-bot-key"
+description = "Engine Room bot API key (crbk_<43 base62>, ADR-0014)"
+# A real key is `crbk_` + exactly 43 base62 chars (~256 bits). The entropy floor
+# lets a hypothetical low-entropy 43-char placeholder through while still tripping
+# on a real random key.
+regex = '''crbk_[0-9A-Za-z]{43}'''
+entropy = 3.5
+keywords = ["crbk_"]
+
+# ---------------------------------------------------------------------------
+# Global allowlist — applies to every rule (including the upstream defaults).
+# Kept tight: these are the exact documented placeholders / fixtures that share
+# the `crbk_` prefix but are not real credentials. A real high-entropy key does
+# not match any of these, so it still trips the rule above.
+# ---------------------------------------------------------------------------
+[allowlist]
+description = "Documented crbk_ placeholders, test fixtures, and env examples"
+regexTarget = "match"
+regexes = [
+  # Short symbolic fixtures used across server/tests + sdk tests
+  # (e.g. crbk_test, crbk_sdk, crbk_fake, crbk_a, crbk_b, crbk_zeta, crbk_good,
+  #  crbk_bogus, crbk_anything, crbk_dup, crbk_aaaa, crbk_bbbb).
+  '''crbk_(test|sdk|fake|good|bogus|anything|dup|zeta|aaaa|bbbb|a|b)\b''',
+  # House-bot test keys: crbk_house_001 / crbk_house_002
+  '''crbk_house_\d+''',
+  # fake_client.DEFAULT_TOKEN: crbk_faketoken000...0
+  '''crbk_faketoken0+''',
+  # keys.py negative test: crbk_not-a-real-key
+  '''crbk_not-a-real-key''',
+  # sdk/quickstart/.env.example placeholder
+  '''crbk_paste_your_key_here''',
+  # Docs / UI literal ellipsis placeholder: crbk_...
+  '''crbk_\.\.\.''',
+]
