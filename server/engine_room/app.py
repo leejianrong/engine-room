@@ -49,6 +49,7 @@ from .pubsub.inproc import InProcPubSub
 from .pubsub.redis import RedisPubSub
 from .spectate.games import router as games_router
 from .spectate.leaderboard import leaderboard_router
+from .spectate.presence import Presence
 from .spectate.sse import router as spectate_router
 from .tournaments.manager import TournamentManager
 from .tournaments.routes import router as tournaments_router
@@ -263,6 +264,11 @@ def create_app(
     # in-process AmbientSupervisor below (unchanged). Flag ON → the out-of-process
     # SDK-client supervisor instead; the in-process feeder is left disabled so
     # games aren't double-produced. The greeter stays in-process either way.
+    # KAN-209: spectator presence signal. Bumped by the lobby endpoint + watch SSE
+    # connect; read by the in-process AmbientSupervisor so the feeder only runs
+    # while someone is watching. Always created (cheap) so the endpoints can touch
+    # it unconditionally; only the in-process supervisor consumes it.
+    app.state.presence = Presence(settings.ambient_presence_window_seconds)
     app.state.house_client_supervisor = None
     if ambient_games > 0 and oop_house:
         app.state.ambient_supervisor = None
@@ -296,6 +302,8 @@ def create_app(
             n=ambient_games,
             time_controls=[parse_pool(p) for p in settings.ambient_pools],
             rating_provider=ambient_rating_provider,
+            presence=app.state.presence,
+            poll_interval_seconds=settings.ambient_presence_poll_seconds,
         )
     else:
         app.state.ambient_supervisor = None

@@ -29,6 +29,12 @@ async def spectate(game_id: str, request: Request) -> StreamingResponse:
     registry = request.app.state.game_registry
     pubsub = request.app.state.pubsub
 
+    # KAN-209: an open watch stream counts as spectator presence, keeping the
+    # ambient feeder alive while someone is actually watching a game.
+    presence = getattr(request.app.state, "presence", None)
+    if presence is not None:
+        presence.touch()
+
     game = registry.get(game_id)
     if game is None:
         raise HTTPException(status_code=404, detail="no such game")

@@ -100,6 +100,12 @@ def _live_game_view(game: Game) -> dict:
 
 @router.get("/api/games")
 async def list_games(request: Request) -> dict:
+    # KAN-209: a lobby poll counts as spectator presence — if no house game is
+    # running there's nothing to watch, so browsing the lobby itself must keep the
+    # ambient feeder alive. Bump the last-seen signal before serving.
+    presence = getattr(request.app.state, "presence", None)
+    if presence is not None:
+        presence.touch()
     registry = request.app.state.game_registry
     pubsub = request.app.state.pubsub
     reader = getattr(request.app.state, "game_reader", None)
