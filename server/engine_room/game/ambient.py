@@ -61,6 +61,7 @@ class AmbientSupervisor:
         rating_provider: "Optional[RatingProvider]" = None,
         presence: "Optional[Presence]" = None,
         poll_interval_seconds: float = 5.0,
+        spawn_stagger_seconds: float = 0.0,
     ) -> None:
         self._registry = registry
         self._launcher = launcher
@@ -76,6 +77,11 @@ class AmbientSupervisor:
         self._presence = presence
         self._poll_interval = poll_interval_seconds
         self._poll_task: Optional[asyncio.Task] = None
+        # KAN-209: gap between successive launches within one refill, so a
+        # multi-game cold-start doesn't fire N opening minimax searches at once
+        # (a GIL spike that can starve the loop). 0 → spawn back-to-back (the
+        # DB-free/integration default; production wires a small value).
+        self._stagger = spawn_stagger_seconds
         # Optional per-launch rating refresh (KAN-207). None → use the house bot
         # object's static rating (the fast/test default, no DB).
         self._rating_provider = rating_provider
@@ -142,6 +148,12 @@ class AmbientSupervisor:
     async def _refill(self) -> None:
         while not self._closing and self._present() and len(self._live) < self._n:
             await self._spawn_one()
+            # Stagger the next launch (KAN-209) — but only if another is actually
+            # needed (no trailing sleep after the last / on a single respawn) and
+            # we're still allowed to spawn. Presence is re-checked by the loop
+            # head, so a spectator leaving mid-cold-start halts the ramp-up.
+            if self._stagger > 0 and not self._closing and len(self._live) < self._n:
+                await asyncio.sleep(self._stagger)
 
     async def _spawn_one(self) -> None:
         tc = self._tcs[self._spawn_count % len(self._tcs)]

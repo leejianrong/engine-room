@@ -13,6 +13,7 @@ import asyncio
 import httpx
 
 from engine_room.app import create_app
+from engine_room.game import ambient as ambient_mod
 from engine_room.game.ambient import AmbientSupervisor
 from engine_room.game.house_bots import (
     JIAN_001_ID,
@@ -61,7 +62,9 @@ class _FakeLauncher:
         self._events[game_id].set()
 
 
-def _supervisor(reg, launcher, presence, *, n=2, poll_interval_seconds=5.0):
+def _supervisor(
+    reg, launcher, presence, *, n=2, poll_interval_seconds=5.0, spawn_stagger_seconds=0.0
+):
     a = RandomBot(id=JIAN_001_ID, name=JIAN_001_NAME)
     b = RandomBot(id=JIAN_002_ID, name=JIAN_002_NAME)
     return AmbientSupervisor(
@@ -73,6 +76,7 @@ def _supervisor(reg, launcher, presence, *, n=2, poll_interval_seconds=5.0):
         time_controls=[TimeControl(base_seconds=180)],
         presence=presence,
         poll_interval_seconds=poll_interval_seconds,
+        spawn_stagger_seconds=spawn_stagger_seconds,
     )
 
 
@@ -189,6 +193,81 @@ async def test_presence_none_is_always_on():
     await sup.start()
     assert len(launcher.launched) == 2
     assert sup._poll_task is None  # no poll loop without a presence signal
+    await sup.stop()
+
+
+# --- Cold-start stagger (KAN-209 e2e regression) -----------------------------
+# A multi-game cold-start must NOT spawn all n games back-to-back — that fires n
+# simultaneous opening minimax searches (a GIL spike that starved the loop and
+# broke the sdk.spec e2e). Deterministic: asyncio.sleep is stubbed to RECORD the
+# requested gaps but still yield to the loop (via the captured real sleep(0)), so
+# no wall-clock time passes and background tasks still run.
+
+
+def _record_sleeps(monkeypatch) -> list[float]:
+    """Patch asyncio.sleep to record non-zero gaps (the stagger) and yield via the
+    real sleep(0). Zero-gap yields (used to drain callbacks) aren't recorded."""
+    real_sleep = asyncio.sleep
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds):
+        if seconds:
+            sleeps.append(seconds)
+        await real_sleep(0)
+
+    monkeypatch.setattr(ambient_mod.asyncio, "sleep", fake_sleep)
+    return sleeps
+
+
+async def test_cold_start_staggers_spawns(monkeypatch):
+    reg, launcher, clock = GameRegistry(), _FakeLauncher(), _Clock()
+    presence = Presence(60.0, clock=clock)
+    presence.touch()
+    sleeps = _record_sleeps(monkeypatch)
+    sup = _supervisor(
+        reg, launcher, presence, n=3, poll_interval_seconds=0, spawn_stagger_seconds=2.0
+    )
+    await sup._refill()  # what the cold-start poll tick does
+    assert len(launcher.launched) == 3  # all n eventually launched
+    # A gap BETWEEN each pair of spawns, none after the last (3 spawns → 2 gaps).
+    assert sleeps == [2.0, 2.0]
+    await sup.stop()
+
+
+async def test_no_stagger_spawns_back_to_back(monkeypatch):
+    """Default (0) → no inter-spawn sleep, preserving the always-on behaviour the
+    integration/DB-free tests rely on."""
+    reg, launcher, clock = GameRegistry(), _FakeLauncher(), _Clock()
+    presence = Presence(60.0, clock=clock)
+    presence.touch()
+    sleeps = _record_sleeps(monkeypatch)
+    sup = _supervisor(reg, launcher, presence, n=2, poll_interval_seconds=0)
+    await sup._refill()
+    assert len(launcher.launched) == 2
+    assert sleeps == []  # no stagger
+    await sup.stop()
+
+
+async def test_single_respawn_does_not_stagger(monkeypatch):
+    """A normal one-game respawn (pool at n-1) spawns exactly one game and never
+    sleeps, even with a stagger configured — the gap only bites a multi-spawn
+    cold-start."""
+    reg, launcher, clock = GameRegistry(), _FakeLauncher(), _Clock()
+    presence = Presence(60.0, clock=clock)
+    presence.touch()
+    sleeps = _record_sleeps(monkeypatch)
+    sup = _supervisor(
+        reg, launcher, presence, n=2, poll_interval_seconds=0, spawn_stagger_seconds=2.0
+    )
+    await sup.start()  # cold-start: 2 spawns → 1 gap
+    assert sleeps == [2.0]
+
+    sleeps.clear()
+    launcher.finish(launcher.launched[0])  # one finishes → single refill
+    for _ in range(10):
+        await asyncio.sleep(0)  # yields (recorded as 0 → filtered), drains callbacks
+    assert len(launcher.launched) == 3  # replacement spawned
+    assert sleeps == []  # single respawn → no trailing stagger
     await sup.stop()
 
 
