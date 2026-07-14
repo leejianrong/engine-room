@@ -93,6 +93,7 @@
 			<h1>Engine Room</h1>
 			<nav>
 				<a href="/gallery">Bot Gallery</a>
+				<a href="/tournaments">Tournaments</a>
 				<a href="/leaderboard">Leaderboard</a>
 				<a href="/bots">My Bots →</a>
 			</nav>
