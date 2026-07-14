@@ -304,7 +304,6 @@ def create_app(
             rating_provider=ambient_rating_provider,
             presence=app.state.presence,
             poll_interval_seconds=settings.ambient_presence_poll_seconds,
-            spawn_stagger_seconds=settings.ambient_spawn_stagger_seconds,
         )
     else:
         app.state.ambient_supervisor = None

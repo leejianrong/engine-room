@@ -202,15 +202,6 @@ class Settings(BaseSettings):
     # often the feeder re-checks presence to refill after a spectator returns.
     ambient_presence_window_seconds: float = 60.0
     ambient_presence_poll_seconds: float = 5.0
-    # KAN-209: gap between successive ambient launches on a (re)fill. Spawning all
-    # `ambient_games` at once fires that many SIMULTANEOUS opening minimax searches
-    # — a CPU/GIL spike (searches run in `to_thread`, but pure-Python minimax holds
-    # the GIL) that, on the cold-start refill when a spectator arrives, can starve
-    # the event loop and delay a concurrent greeter/SDK game from rendering. A small
-    # gap phase-shifts the searches, as steady-state one-at-a-time respawns already
-    # do. Only bites when >1 game spawns in one refill (cold-start); a normal
-    # single-game respawn on finish never sleeps.
-    ambient_spawn_stagger_seconds: float = 2.0
 
     # Artificial pause before the in-process house bot replies. Default 0 (instant,
     # no production impact); local dev sets ~0.5s so house games are watchable move
