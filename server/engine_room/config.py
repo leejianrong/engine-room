@@ -192,6 +192,16 @@ class Settings(BaseSettings):
     # the search depth. Pure-Python CPU grows with depth, so dial it down on a small
     # VM (ER_AMBIENT_MINIMAX_DEPTH). Depth 3 ≈ 0.1-0.3s/move.
     ambient_minimax_depth: int = 3
+    # KAN-209: spectator-gate the ambient feeder. New house-vs-house games launch
+    # only while a spectator is "present" — any GET /api/games lobby poll OR an
+    # active watch SSE connect within the last `ambient_presence_window_seconds`
+    # bumps a last-seen timestamp. Once it goes stale the feeder stops refilling and
+    # lets in-flight games finish (never aborts a live game), so an idle lobby costs
+    # zero Neon growth / compute. Supersedes the blunt ER_AMBIENT_GAMES=0 manual
+    # pause (that knob still works). The poll interval is the cold-start latency: how
+    # often the feeder re-checks presence to refill after a spectator returns.
+    ambient_presence_window_seconds: float = 60.0
+    ambient_presence_poll_seconds: float = 5.0
 
     # Artificial pause before the in-process house bot replies. Default 0 (instant,
     # no production impact); local dev sets ~0.5s so house games are watchable move

@@ -11,6 +11,13 @@ persisted — V6 Q4); a finished ambient game is evicted from the in-memory
 registry (its record + replay live in Postgres) so `_games` stays bounded under
 the endless stream.
 
+Spectator-gated (KAN-209): when a `Presence` signal is wired, new games only
+launch while someone is watching (a recent lobby poll or watch connect); once
+presence goes stale the feeder stops refilling and lets in-flight games finish,
+so idle-lobby compute/Neon growth drops to zero. A cold-start poll loop refills
+the moment a spectator returns. Without a presence signal it is always-on
+(the pre-KAN-209 behaviour).
+
 Single-process/in-memory (R5). Started/stopped by the app lifespan; disabled
 when `n == 0` (the CI/unit default).
 """
@@ -26,6 +33,7 @@ from .game import Participant
 
 if TYPE_CHECKING:
     from ..matchmaking.launcher import GameLauncher
+    from ..spectate.presence import Presence
     from .house_bots import RandomBot
     from .registry import GameRegistry
 
@@ -51,12 +59,23 @@ class AmbientSupervisor:
         n: int,
         time_controls: Sequence[TimeControl],
         rating_provider: "Optional[RatingProvider]" = None,
+        presence: "Optional[Presence]" = None,
+        poll_interval_seconds: float = 5.0,
     ) -> None:
         self._registry = registry
         self._launcher = launcher
         self._house_a = house_a
         self._house_b = house_b
         self._n = n
+        # KAN-209: spectator-gate the feeder. When a `presence` signal is
+        # injected, NEW ambient games only launch while a spectator is present
+        # (a recent lobby poll or watch connect); once presence goes stale we
+        # stop refilling and let in-flight games finish naturally (never abort a
+        # live game). None → always-on (the pre-KAN-209 behaviour; used by the
+        # DB-free/integration tests that drive the supervisor directly).
+        self._presence = presence
+        self._poll_interval = poll_interval_seconds
+        self._poll_task: Optional[asyncio.Task] = None
         # Optional per-launch rating refresh (KAN-207). None → use the house bot
         # object's static rating (the fast/test default, no DB).
         self._rating_provider = rating_provider
@@ -78,15 +97,25 @@ class AmbientSupervisor:
             return
         self._started = True
         self._closing = False
+        # Refill now (no-op if presence is currently stale) and, when gated,
+        # start the poll loop so a stale→fresh transition (a spectator arriving)
+        # cold-starts the lobby — nothing else would trigger a refill then, since
+        # refills are otherwise only driven by a game finishing (KAN-209).
         await self._refill()
+        if self._presence is not None and self._poll_interval > 0:
+            self._poll_task = asyncio.create_task(self._poll())
 
     async def stop(self) -> None:
         self._closing = True
+        if self._poll_task is not None:
+            self._poll_task.cancel()
+        poll_tasks = [self._poll_task] if self._poll_task is not None else []
         for task in list(self._live) + list(self._refills):
             task.cancel()
-        for task in list(self._live) + list(self._refills):
+        for task in list(self._live) + list(self._refills) + poll_tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
+        self._poll_task = None
         # Evict the cancelled games now (the done-callbacks fire on a later loop
         # turn, so don't rely on them for deterministic shutdown).
         for game_id in self._live.values():
@@ -95,8 +124,23 @@ class AmbientSupervisor:
         self._refills.clear()
         self._started = False
 
+    def _present(self) -> bool:
+        """Whether new ambient games may launch right now (KAN-209). No presence
+        signal wired → always-on."""
+        return self._presence is None or self._presence.is_fresh()
+
+    async def _poll(self) -> None:
+        """Cold-start loop (KAN-209): while gated, periodically re-check presence
+        and refill. This is what fills the lobby when a spectator arrives after it
+        has drained to empty (a game finishing is the only other refill trigger,
+        and there are none in flight once drained)."""
+        while not self._closing:
+            await asyncio.sleep(self._poll_interval)
+            if not self._closing:
+                await self._refill()
+
     async def _refill(self) -> None:
-        while not self._closing and len(self._live) < self._n:
+        while not self._closing and self._present() and len(self._live) < self._n:
             await self._spawn_one()
 
     async def _spawn_one(self) -> None:

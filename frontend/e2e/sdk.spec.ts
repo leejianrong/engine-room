@@ -50,9 +50,11 @@ test('SDK bot shows on the dashboard and is watchable', async ({ page }) => {
 	await page.goto('/');
 	await expect(page.getByRole('heading', { name: 'Engine Room' })).toBeVisible();
 
-	// The SDK bot is matched (vs the house greeter) and its card appears.
-	const liveSection = page.locator('section', { hasText: 'Live games' });
-	const sdkCard = liveSection.locator('a.card', { hasText: SDK_BOT_NAME }).first();
+	// The SDK bot is matched (vs the house greeter) and its card appears
+	// ANYWHERE on the dashboard — it may land in the "Featured game" slot OR the
+	// "Live games" list depending on registry order / watcher counts (both are
+	// `a.card` links under <main>), and either satisfies "shows on the dashboard".
+	const sdkCard = page.locator('main').locator('a.card', { hasText: SDK_BOT_NAME }).first();
 	await expect(sdkCard).toBeVisible({ timeout: 45_000 });
 
 	// Watch it: the board renders from the catch-up snapshot.
