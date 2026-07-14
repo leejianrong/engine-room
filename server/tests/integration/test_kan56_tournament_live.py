@@ -147,7 +147,11 @@ async def _create_tournament(http, target_size=3) -> str:
         "time_control": {"base_seconds": 180, "increment_seconds": 0},
     })
     assert resp.status_code == 201, resp.text
-    return resp.json()["id"]
+    body = resp.json()
+    # The detail shape (reused by create) exposes the owner id so the SPA can
+    # gate the owner-only "Start" control (KAN-187).
+    assert body.get("created_by"), "tournament detail should expose created_by"
+    return body["id"]
 
 
 async def test_enrollment_validation():

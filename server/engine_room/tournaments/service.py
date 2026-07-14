@@ -129,6 +129,10 @@ async def get_tournament(session: AsyncSession, tournament_id: str) -> dict | No
         "status": t.status,
         "time_control": _time_control(t),
         "target_size": t.target_size,
+        # Owning user id (str) or None for a house/orphaned tournament. Surfaced so
+        # the SPA can show the owner-only "Start" control to the creator only
+        # (compared against GET /api/users/me). Read-only; no schema change.
+        "created_by": str(t.created_by) if t.created_by is not None else None,
         "created_at": t.created_at.isoformat(),
         "started_at": t.started_at.isoformat() if t.started_at else None,
         "finished_at": t.finished_at.isoformat() if t.finished_at else None,

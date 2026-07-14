@@ -171,6 +171,107 @@ export function fmtTimeControl(tc: TimeControl): string {
 	return `${Math.round(tc.base_seconds / 60)}+${tc.increment_seconds}`;
 }
 
+// ── Tournaments (KAN-56 backend / KAN-187 UI) ─────────────────────────────────
+// Round-robin events over the tournament REST surface. Anonymous reads (list +
+// detail) go over plain fetch like the lobby; create + start ride the same-origin
+// cookie session (botFetch pattern) since they're owner-scoped.
+
+export type TournamentStatus = 'pending' | 'running' | 'finished';
+
+// A row in GET /api/tournaments — the light list summary.
+export type TournamentSummary = {
+	id: string;
+	name: string;
+	format: string; // 'round_robin' in this slice
+	status: TournamentStatus;
+	time_control: TimeControl;
+	target_size: number;
+	entry_count: number;
+	created_at: string;
+};
+
+// One row of the standings (already sorted score-desc, then seed, by the server).
+export type TournamentStanding = {
+	rank: number;
+	bot_id: string;
+	name: string | null; // null if the bot row is gone
+	seed: number;
+	score: number;
+};
+
+// One scheduled pairing = the schedule AND the results table.
+// result: null (not yet played) | white_wins | black_wins | draw | void (both
+// offline) | bye (odd field). game_id is set only when a real game was played.
+export type TournamentGameResult =
+	| 'white_wins'
+	| 'black_wins'
+	| 'draw'
+	| 'void'
+	| 'bye'
+	| null;
+
+export type TournamentGame = {
+	round: number; // 0-based
+	white_bot_id: string | null;
+	black_bot_id: string | null; // null on a bye
+	result: TournamentGameResult;
+	game_id: string | null;
+};
+
+// GET /api/tournaments/{id} — detail: standings + full schedule/results.
+export type TournamentDetail = {
+	id: string;
+	name: string;
+	format: string;
+	status: TournamentStatus;
+	time_control: TimeControl;
+	target_size: number;
+	created_by: string | null; // owner user id — gates the "Start" control
+	created_at: string;
+	started_at: string | null;
+	finished_at: string | null;
+	standings: TournamentStanding[];
+	games: TournamentGame[];
+};
+
+export async function fetchTournaments(): Promise<TournamentSummary[]> {
+	const resp = await fetch(`${API_BASE}/api/tournaments`);
+	if (!resp.ok) throw new Error(`tournaments ${resp.status}`);
+	return (await resp.json()).tournaments as TournamentSummary[];
+}
+
+export async function fetchTournament(id: string): Promise<TournamentDetail> {
+	const resp = await fetch(`${API_BASE}/api/tournaments/${id}`);
+	if (!resp.ok) throw new Error(`tournament ${resp.status}`);
+	return (await resp.json()) as TournamentDetail;
+}
+
+// Create a round-robin (authenticated owner). 401 → sign in. Returns the full
+// detail object (the server echoes get_tournament).
+export async function createTournament(data: {
+	name: string;
+	time_control: TimeControl;
+	target_size: number;
+}): Promise<TournamentDetail> {
+	const resp = await fetch(`${API_BASE}/api/tournaments`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data)
+	});
+	if (!resp.ok) throw new ApiError(resp.status, `create tournament → ${resp.status}`);
+	return (await resp.json()) as TournamentDetail;
+}
+
+// Owner-only start of a pending tournament. 403 not yours · 404 gone · 409 not
+// pending (already running/finished).
+export async function startTournament(id: string): Promise<void> {
+	const resp = await fetch(`${API_BASE}/api/tournaments/${id}/start`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' }
+	});
+	if (!resp.ok) throw new ApiError(resp.status, `start tournament → ${resp.status}`);
+}
+
 // ── Bot management (V2 REST, owner-scoped, same-origin cookie session) ──────
 
 // A bot as returned by the API — never the secret key, only the display prefix.
